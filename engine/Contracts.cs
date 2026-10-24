@@ -9,7 +9,11 @@ public sealed record CheckView(Square From,Square To);
 public sealed record CheckPreviewView(BoardView[] Boards,CheckView[] Checks);
 public sealed record PositionView(BoardView[] Boards,MoveView[] LegalMoves,bool White,int Present,bool CanSubmit,
     bool InCheck,string Status,string? Reason,bool? Winner,int PendingCount,int TurnCount,int Viewing,
-    TurnView[] Turns,MoveView[] Pending,string Pgn,string Result,string WhiteName,string BlackName,bool Even,BranchView[] Branches,CheckPreviewView? CheckPreview,int EngineStrength);
+    TurnView[] Turns,MoveView[] Pending,string Pgn,string Result,string WhiteName,string BlackName,bool Even,BranchView[] Branches,CheckPreviewView? CheckPreview,int EngineStrength)
+{
+    // Positive favors White: the side that has used fewer branching slots.
+    public int TimelineAdvantage { get; init; }
+}
 public sealed record EngineRequest(string Command,string? Pgn=null,string? Move=null,int Index=-1,int Strength=SkynetZero.Web.Strength.Default,string? Side=null,string? Variant=null);
 public sealed record EngineReply(PositionView? Position=null,Evaluation? Evaluation=null,string? Error=null,string? Info=null);
 public sealed record Strength(int Level,int Depth,int Nodes,int Milliseconds) {

@@ -120,6 +120,7 @@ console.log('PASS real square selection and undo in both orientations, screen-sp
 // that previously trapped History/Parallel, at both ends of the zoom range.
 await importGame('[Board "standard-t0"]\n*');
 if(await closePanel.isVisible())await closePanel.click();
+assert.equal(await page.locator('.timeline-expansion-arrow').count(),2,'Both sides can create an active timeline from a balanced start');
 for(const [mode,key] of [['normal',null],['history','t'],['parallel','y']]){
  if(key){await page.keyboard.press(key);await page.locator(`.view-${mode}`).waitFor();}
  for(const zoom of [12,72]){
@@ -151,6 +152,18 @@ for(const [mode,key] of [['normal',null],['history','t'],['parallel','y']]){
 }
 assert.deepEqual(errors,[]);
 console.log('PASS unbounded camera at minimum/maximum zoom in all views, drag across edges, no browser selection, and focus after distant panning');
+// Capture the check badge at fractional zooms: browser-painted round button
+// borders previously developed seams when the whole multiverse was scaled.
+await importGame('[Board "custom"]\n[Size "8x8"]\n[2ppp3/2pkp3/N1ppp3/8/8/8/8/7K:0:1:w]\n1. (0T1)Na6b8 /\n*');
+if(await closePanel.isVisible())await closePanel.click();
+for(const [mode,key] of [['normal',null],['history','t'],['parallel','y']]){
+ if(key){await page.keyboard.press(key);await page.locator(`.view-${mode}`).waitFor();}
+ for(const zoom of [12,18,24,36,72]){
+  await setZoom(zoom);await centerBoards();
+  await page.screenshot({path:`${screenshots}/skynet-check-badge-${mode}-${zoom}.png`});
+ }
+ if(key){await page.keyboard.press(key);await page.locator('.view-normal').waitFor();}
+}
 for(const white of [true,false]){
  let pgn=`[Board "custom"]\n[Size "8x8"]\n[Color "${white?'white':'black'}"]\n`;
  const empty='7k/8/8/8/8/8/8/7K',queen=`7k/8/8/8/${white?'Q':'q'}7/8/8/7K`;
@@ -164,11 +177,21 @@ for(const white of [true,false]){
   if(flipped){await page.keyboard.press('u');await page.waitForTimeout(150);}
   const offset=await page.evaluate(layer=>parseFloat(document.querySelector(`.timeline-line[data-layer="${layer}"]`).style.top)-parseFloat(document.querySelector('.timeline-line[data-layer="0"]').style.top),layer);
   assert.equal(offset>0,white!==flipped,'New branch must be on the moving color’s side, even after landing on an opposing timeline');
+  assert.equal(await page.locator('.timeline-advantage.available').getAttribute('aria-label'),`${white?'Black':'White'}: next new timeline is active`,'Flipping must not change which side can create an active timeline');
+  assert.equal(await page.locator('.timeline-advantage.unavailable').getAttribute('aria-label'),`${white?'White':'Black'}: next new timeline is inactive`);
+  assert.equal(await page.locator('.timeline-expansion-arrow').count(),1);
+  const markers=await page.locator('.timeline-advantage').evaluateAll(markers=>markers.map(marker=>({white:marker.classList.contains('white'),y:parseFloat(marker.style.top),arrow:marker.querySelector('path')?.getAttribute('transform')})));
+  const upper=markers.reduce((a,b)=>a.y<b.y?a:b),lower=markers.reduce((a,b)=>a.y>b.y?a:b);
+  assert.equal(lower.white,!flipped,'The White present marker must follow the White branch side');
+  if(lower.arrow)assert.equal(lower.arrow,'rotate(0 64 64)','Lower marker must point outward');
+  if(upper.arrow)assert.equal(upper.arrow,'rotate(180 64 64)','Upper marker must point outward');
  }
  await page.keyboard.press('u');
+ await setZoom(18);await centerBoards();await page.screenshot({path:`${screenshots}/skynet-timeline-advantage-${white?'black':'white'}.png`});
+ await page.keyboard.press('z');await page.waitForFunction(()=>document.querySelectorAll('.timeline-expansion-arrow').length===2);
 }
 assert.deepEqual(errors,[]);
-console.log('PASS White and Black branch placement from opposing timelines, including flipped perspective');
+console.log('PASS White and Black branch placement and Steam-style present markers, including flipped perspective and undo');
 } catch(error) {
  await page.screenshot({path:join(screenshots,'failure.png')});
  throw error;

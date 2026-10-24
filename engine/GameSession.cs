@@ -89,7 +89,13 @@ public sealed class GameSession
         return new(BoardViews(state),moves.ToArray(),state.Color,state.Present,current&&pending.Count>0&&RoyalLegality.CanSubmit(state),
             status.InCheck,status.Status.ToString(),status.Reason,status.WinnerWhite,current?pending.Count:0,turns.Count,viewing,
             turns.ToArray(),current?pending.ToArray():[],Export(),current?result:status.IsTerminal?status.WinnerWhite is {} winner?winner?"1-0":"0-1":"1/2-1/2":"*",whiteName,blackName,state.EvenStart,
-            branches.Where(b=>current||b.Turn<=viewing).ToArray(),status.InCheck?CheckPreview(state):null,engineStrength);
+            branches.Where(b=>current||b.Turn<=viewing).ToArray(),status.InCheck?CheckPreview(state):null,engineStrength)
+        {
+            // Match the active-timeline allowance, including imported imbalances
+            // and the +0/-0 offset in even-start variants. Use the viewed state,
+            // so pending moves, undo and analysis rewinds update the same value.
+            TimelineAdvantage=state.TLHandicap-state.MinTL-state.MaxTL
+        };
     }
     private static BoardView[] BoardViews(GameState state) {
         var boards=new List<BoardView>();

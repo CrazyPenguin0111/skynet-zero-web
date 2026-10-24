@@ -36,6 +36,10 @@ internal static class UiChecks
             var rendered=await renderer.RenderComponentAsync<Multiverse>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Position",position},{"LastMoves",Array.Empty<MoveView>()}}));
             string html=rendered.ToHtmlString();
             var side=white?"white":"black";
+            if(!html.Contains($"class=\"timeline-advantage {(white?"black":"white")} available\"")||
+               !html.Contains($"class=\"timeline-advantage {side} unavailable\"")||
+               System.Text.RegularExpressions.Regex.Matches(html,"class=\"timeline-expansion-arrow\"").Count!=1)
+                throw new Exception("Only the side able to create an active timeline should have a purple present-line arrow");
             if(!html.Contains($"class=\"played-travel {side}\"")||!html.Contains($"marker-end=\"url(#travel-{side})\"")||!html.Contains("Branched from L 0"))throw new Exception("Lost persistent travel, side color or parent connector");
             if(html.Contains("T@board.Time")||!html.Contains(" T1</span>"))throw new Exception("Turn labels must render their numeric time");
             var move=position.Turns.SelectMany(turn=>turn.Moves).Last(m=>m.From.L!=m.To.L||m.From.T!=m.To.T);
@@ -49,8 +53,8 @@ internal static class UiChecks
             foreach(var line in position.Boards.GroupBy(b=>b.Layer)){
                 var last=line.MaxBy(MultiverseLayout.Half)!;
                 var track=System.Text.RegularExpressions.Regex.Match(html,$"class=\"timeline-line\" data-layer=\"{line.Key}\" style=\"left:([\\d.]+)px;top:[\\d.]+px;width:([\\d.]+)px");
-                if(!track.Success||Math.Abs(double.Parse(track.Groups[1].Value)+double.Parse(track.Groups[2].Value)-(flat.Left(MultiverseLayout.Half(last))+last.Width*36+26))>.01)
-                    throw new Exception("Timeline arrow must end beside its own last board");
+                if(!track.Success||Math.Abs(double.Parse(track.Groups[1].Value)+double.Parse(track.Groups[2].Value)-(flat.Left(MultiverseLayout.Half(last))+last.Width*36+50))>.01)
+                    throw new Exception("Timeline arrow must extend beyond its own last board");
             }
             foreach(string mode in new[]{"history","parallel"})
             foreach(bool flipped in new[]{false,true})

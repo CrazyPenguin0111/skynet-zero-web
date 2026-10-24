@@ -16,6 +16,7 @@
     double Y(Square s)=>camera.SquareCenter(s,Flipped).Y;
     var annotation=AnnotationSquare();
     var presentPoint=camera.Ground(camera.Left(present)+boardWidth/2d,camera.CenterY(camera.TopLayer));
+    int advantage=Position.TimelineAdvantage;
     var bandPosition=camera.Isometric
         ?$"left:calc(var(--camera-left,50vw) + {presentPoint.X*zoom}px);top:calc(var(--camera-top,50vh) + {presentPoint.Y*zoom}px);height:{boardWidth*.76*zoom*.8660254}px;--band-angle:{camera.PresentAngle}deg;--scene-height:{height*zoom}px"
         :$"left:calc(var(--camera-left,50vw) + {presentPoint.X*zoom}px);width:{boardWidth*.76*zoom}px";
@@ -36,13 +37,26 @@
     <div class="multiverse-scale" style="width:@(width*zoom)px;height:@(height*zoom)px">
     <div class="multiverse-canvas" data-zoom="@zoom" style="width:@(width)px;height:@(height)px;--cell:@(cell)px;transform:scale(@zoom)">
         <div class="timeline-map" style="width:@(camera.FlatWidth)px;height:@(camera.FlatHeight)px;transform:@camera.GroundTransform">
+        @foreach(bool white in new[]{false,true})
+        {
+            var available=white?advantage>=0:advantage<=0;
+            var below=white!=Flipped;
+            var outerLayer=below?(Flipped?minLayer:maxLayer):camera.TopLayer;
+            var markerY=camera.CenterY(outerLayer)+(below?1:-1)*pitch*.8;
+            var label=$"{(white?"White":"Black")}: next new timeline is {(available?"active":"inactive")}";
+            <svg class="timeline-advantage @(white?"white":"black") @(available?"available":"unavailable")" viewBox="0 0 128 128" role="img" aria-label="@label" style="left:@(camera.Left(present)+boardWidth/2d)px;top:@(markerY)px">
+                <title>@label</title>
+                <circle cx="64" cy="64" r="@(available?59:38)"/>
+                @if(available){<path class="timeline-expansion-arrow" d="M44 16H84V64H108L64 110L20 64H44Z" transform="rotate(@(below?0:180) 64 64)"/>}
+            </svg>
+        }
         @for(int layer=maxLayer;layer>=minLayer;layer--)
         {
             var l=layer;var branch=Position.Branches.FirstOrDefault(b=>b.Layer==l);
             var last=allBoards.Where(b=>b.Layer==l).MaxBy(MultiverseLayout.Half);
             if(last is null){continue;}
             var start=branch is null?12:camera.Left(branch.StartTime*2+(branch.StartWhite?0:1));
-            var end=camera.Left(MultiverseLayout.Half(last))+last.Width*cell+26;
+            var end=camera.Left(MultiverseLayout.Half(last))+last.Width*cell+50;
             <div class="timeline-line" data-layer="@l" style="left:@(start)px;top:@(camera.CenterY(l)-48)px;width:@(end-start)px" aria-hidden="true">@if(branch is null){<span>@LayerLabel(l)</span>}<i></i></div>
         }
         <svg class="branch-connectors" width="@camera.FlatWidth" height="@camera.FlatHeight" aria-label="Timeline ancestry">
@@ -65,7 +79,7 @@
             var half=MultiverseLayout.Half(board);var originPoint=camera.BoardOrigin(board);
             var origin=Position.Branches.FirstOrDefault(b=>b.Layer==board.Layer&&b.StartTime==board.Time&&b.StartWhite==board.White);
             <section @key="(board.Layer,board.Time,board.White)" class="board @(board.White?"white-turn":"black-turn") @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move playable":"") @(board.Frontier&&board.Active&&half==present?"present":"") @(camera.Isometric&&board.White!=perspective?"other-side":"")" style="left:@(originPoint.X)px;top:@(originPoint.Y)px;width:@(board.Width*cell+26)px;transform:@camera.BoardTransform" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
-                @if(checkingBoards.Contains((board.Layer,board.Time,board.White))){<button class="check-indicator board-check" @onclick="()=>OnCheck.InvokeAsync()" aria-label="@(ShowChecks?"Hide checks":"Show checks")" aria-pressed="@(ShowChecks?"true":"false")" title="@(Position.Status=="Checkmate"?"Checkmate · show checks":"Check · show checks")">!</button>}
+                @if(checkingBoards.Contains((board.Layer,board.Time,board.White))){<button class="check-indicator board-check" @onclick="()=>OnCheck.InvokeAsync()" aria-label="@(ShowChecks?"Hide checks":"Show checks")" aria-pressed="@(ShowChecks?"true":"false")" title="@(Position.Status=="Checkmate"?"Checkmate · show checks":"Check · show checks")"><svg viewBox="0 0 34 34" aria-hidden="true" focusable="false"><circle cx="17" cy="17" r="16" fill="#dc2637" stroke="#ffc1c6" stroke-width="2"/><path d="M15 7h4v14h-4z M15 24h4v4h-4z" fill="white"/></svg></button>}
                 @if(origin is not null){<div class="branch-source">Branched from @LayerLabel(origin.ParentLayer) · T@(origin.ParentTime) @(origin.ParentWhite?"White":"Black")</div>}
                 <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@(board.Time)</span></header>
                 <div class="board-frame"><div class="squares" role="grid" style="grid-template-columns:repeat(@board.Width,var(--cell))">
