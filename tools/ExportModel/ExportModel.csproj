@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+<ItemGroup><Reference Include="AlphaBeta"><HintPath>$(SkynetSource)/tests/AlphaBeta/bin/Release/net9.0/AlphaBeta.dll</HintPath></Reference><PackageReference Include="TorchSharp" Version="0.107.0" /></ItemGroup>
+</Project>

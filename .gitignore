@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+artifacts/
+.vs/
+.idea/
+.DS_Store
+*.user
+*.log
+core
+core.*
+node_modules/

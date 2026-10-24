@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CA1416;CS0649</NoWarn>
+    <RootNamespace>SkynetZero.Web</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WasmBuildNative>false</WasmBuildNative>
+    <WasmEnableSIMD>true</WasmEnableSIMD>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/evaluation-tables.bin" LogicalName="SkynetZero.LearnedTables.bin" />
+    <EmbeddedResource Include="Model/weights.json" LogicalName="SkynetZero.Model.json" />
+    <EmbeddedResource Include="Resources/fsac_table.bin" LogicalName="SkynetZero.SacrificeTable.bin" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
+  </ItemGroup>
+</Project>

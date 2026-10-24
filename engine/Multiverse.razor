@@ -1,0 +1,73 @@
+<div class="multiverse-viewport" aria-label="Multiverse chess boards. Scroll to explore time and timelines.">
+@if (Position is not null)
+{
+    var minHalf=Position.Boards.Min(b=>b.Time*2+(b.White?0:1));
+    var maxHalf=Position.Boards.Max(b=>b.Time*2+(b.White?0:1));
+    var minLayer=Position.Boards.Min(b=>b.Layer);var maxLayer=Position.Boards.Max(b=>b.Layer);
+    var boardWidth=Position.Boards.Max(b=>b.Width)*Cell+24;var pitch=boardWidth+68;var row=Position.Boards.Max(b=>b.Height)*Cell+126;
+    var width=Math.Max(800,(maxHalf-minHalf+1)*pitch+100);var height=Math.Max(460,(maxLayer-minLayer+1)*row+85);
+    var present=Position.Boards.Where(b=>b.Frontier&&b.Active).Min(b=>b.Time*2+(b.White?0:1));
+    <div class="multiverse-canvas" style="width:@(width)px;height:@(height)px;--cell:@(Cell)px">
+        <div class="time-axis"><span>THE PAST</span><span>TIME FLOWS THIS WAY <b>⟶</b></span></div>
+        <div class="present-line" style="left:@(80+(present-minHalf)*pitch-22)px;height:@(height-70)px"><span>PRESENT</span></div>
+        @for(int layer=maxLayer;layer>=minLayer;layer--)
+        {
+            var l=layer;var y=70+(maxLayer-l)*row;
+            <div class="timeline-line" style="top:@(y+row/2)px;width:@(width-35)px"><span>@LayerLabel(l)</span><i>➤</i></div>
+        }
+        @foreach(var board in Position.Boards.OrderBy(b=>b.Time).ThenBy(b=>b.White))
+        {
+            var half=board.Time*2+(board.White?0:1);var left=80+(half-minHalf)*pitch;var top=80+(maxLayer-board.Layer)*row;
+            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move":"")" style="left:@(left)px;top:@(top)px" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
+                <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@board.Time</span><span>@(board.Frontier?board.Active?"ACTIVE":"INACTIVE":"PAST")</span></header>
+                <div class="board-frame"><div class="squares" role="grid" style="grid-template-columns:repeat(@board.Width,var(--cell))">
+                @for(int rank=0;rank<board.Height;rank++)
+                {
+                    var y=Flipped?rank:board.Height-1-rank;
+                    @for(int file=0;file<board.Width;file++)
+                    {
+                        var x=Flipped?board.Width-1-file:file;var square=new Square(x,y,board.Time,board.Layer,board.White);
+                        var piece=board.Pieces[y*board.Width+x];var selected=Selected==square;
+                        var destination=Selected is not null&&Position.LegalMoves.Any(m=>m.From==Selected&&m.To==square);
+                        var last=LastMoves.Any(m=>m.From==square||m.To==square);
+                        <button type="button" role="gridcell" class="square @((x+y)%2==0?"dark":"light") @(selected?"selected":"") @(destination?"destination":"") @(last?"last-move":"")" @onclick="()=>OnSquare.InvokeAsync(square)" aria-label="@SquareLabel(square,piece)" aria-selected="@selected" title="@SquareLabel(square,piece)">
+                            @if(piece!=0){<img class="piece" src="@PieceImage(piece)" alt="@PieceName(piece)" draggable="false"/> @if(IsFairy(piece)){<span class="fairy-badge">@PieceLetter(piece)</span>}}
+                            @if(destination){<span class="move-dot"></span>}
+                            @if(file==0){<span class="rank-label">@(y+1)</span>}
+                            @if(rank==board.Height-1){<span class="file-label">@((char)('a'+x))</span>}
+                        </button>
+                    }
+                }
+                </div></div>
+                <footer><span>@LayerLabel(board.Layer)</span><span>@(board.White?"WHITE":"BLACK") TO MOVE</span></footer>
+            </section>
+        }
+        @if(LastMoves.Any(m=>m.From.L!=m.To.L||m.From.T!=m.To.T))
+        {
+            <svg class="travel-overlay" width="@width" height="@height" aria-hidden="true"><defs><marker id="travel-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#f0c971"/></marker></defs>
+            @foreach(var move in LastMoves.Where(m=>m.From.L!=m.To.L||m.From.T!=m.To.T))
+            {
+                double X(Square s)=>80+(s.T*2+(s.White?0:1)-minHalf)*pitch+12+(Flipped?Position.Boards[0].Width-1-s.X:s.X)*Cell+Cell/2;
+                double Y(Square s)=>80+(maxLayer-s.L)*row+36+(Flipped?s.Y:Position.Boards[0].Height-1-s.Y)*Cell+Cell/2;
+                <path d="M @X(move.From),@Y(move.From) Q @((X(move.From)+X(move.To))/2),@(Math.Min(Y(move.From),Y(move.To))-85) @X(move.To),@Y(move.To)" fill="none" stroke="#f0c971" stroke-width="4" marker-end="url(#travel-arrow)"/>
+            }
+            </svg>
+        }
+    </div>
+}
+</div>
+@code {
+ [Parameter]public PositionView? Position{get;set;}
+ [Parameter]public Square? Selected{get;set;}
+ [Parameter]public bool Flipped{get;set;}
+ [Parameter]public int Cell{get;set;}=36;
+ [Parameter]public MoveView[] LastMoves{get;set;}=[];
+ [Parameter]public EventCallback<Square> OnSquare{get;set;}
+ private string LayerLabel(int layer)=>Position?.Even==true?(layer<=0?$"L −{-layer}":$"L +{layer-1}"):$"L {(layer>0?"+":"")}{layer}";
+ public static int Kind(int piece)=>(Math.Abs(piece)-1)%12+1;
+ public static bool IsFairy(int piece)=>Kind(piece) is 5 or >=8;
+ public static char PieceLetter(int piece)=>Board.PieceChars[Math.Abs(piece)];
+ public static string PieceImage(int piece)=>$"pieces/{(Math.Abs(piece)<=12?'w':'b')}{(Kind(piece) switch{1 or 10=>'P',2 or 8=>'N',3 or 9=>'B',4=>'R',5 or 6 or 11=>'Q',_=>'K'})}.svg";
+ public static string PieceName(int piece)=>(Math.Abs(piece)<=12?"White ":"Black ")+(Kind(piece) switch{1=>"pawn",2=>"knight",3=>"bishop",4=>"rook",5=>"princess",6=>"queen",7=>"king",8=>"unicorn",9=>"dragon",10=>"brawn",11=>"royal queen",_=>"common king"});
+ private static string SquareLabel(Square s,int piece)=>$"{(char)('a'+s.X)}{s.Y+1}, {(piece==0?"empty":PieceName(piece))}, timeline {s.L}, T{s.T} {(s.White?"white":"black")}";
+}

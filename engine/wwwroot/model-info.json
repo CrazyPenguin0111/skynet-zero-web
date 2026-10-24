@@ -1,0 +1,48 @@
+{
+  "name": "SkynetZero v10 \u00b7 epoch 1040",
+  "run": "20261020-030313-588",
+  "epoch": 1040,
+  "trainingGames": 52000,
+  "selection": {
+    "Version": 1,
+    "Checkpoint": "checkpoints/epoch-001040",
+    "CheckpointSha256": "EDD65A6516A9E01CE890BD634B07C1F4017526B7BDA284952BFEE1021C9E81B0",
+    "Epoch": 1040,
+    "Games": 52000,
+    "SelectedUtc": "2026-10-20T05:44:16.8102721Z",
+    "Reason": "Promote only after complete color-swapped development pairs with guaranteed game score > 0.5 both overall and after deduplication, and an exact one-sided paired sign-test p <= 0.05. Caps receive zero credit. Repeated opening identities, supplied move prefixes, or identical paired trajectories count as one evidence group, using its worst pair score. Tied groups do not enter the sign test; at least five favorable non-tied groups are necessary. Repeated sequential challenges and related openings do not provide a global confidence or strength guarantee.",
+    "MatchReport": "best-matches/epoch-001040-b5c38b5108ec422daeda8d397f23bb98.json",
+    "GuaranteedScore": 0.640625,
+    "PreviousCheckpoint": "checkpoints/epoch-000440"
+  },
+  "weightsSha256": "951d304a0651c2fdcbfcd6aa149ab299d8750489da5e625183eec0d08328bd3d",
+  "exportSha256": "2169bcf4b55245d9496eaafda6730a585720b2fb816836cd84d2494405e4d3f3",
+  "selectionNote": "Most recent statistically promoted trained v10 model found at task start. Latest run best.json remained epoch 0. Cross-run superiority is not established.",
+  "centipawnReference": 484.2,
+  "inputVersion": 10,
+  "learnedTablesSha256": "a756b4bad28775fc14c3f192abaf9d9ad756c1bfa5b765bc7bd0c84b13a96162",
+  "promotionEvidence": {
+    "Version": 2,
+    "TotalPairs": 32,
+    "UniquePairs": 32,
+    "DependentPairs": 0,
+    "FavorablePairs": 11,
+    "UnfavorablePairs": 2,
+    "TiedPairs": 19,
+    "SignTestPValue": 0.011230468750000009,
+    "SignTestThreshold": 0.05,
+    "GuaranteedScore": 0.640625,
+    "UniqueGuaranteedScore": 0.640625,
+    "ScorePassed": true,
+    "UniqueScorePassed": true,
+    "Promoted": true,
+    "Reason": "Guaranteed game score and paired sign-test thresholds passed.",
+    "Regressed": false,
+    "RegressionPValue": 0.9982910156250014
+  },
+  "browserDifferences": [
+    "Single-thread, bounded browser search; strength levels set depth, nodes and time.",
+    "Managed float32 C# transformer inference with original weights.",
+    "Optional opening-book ordering is disabled; learned evaluation tables are included."
+  ]
+}

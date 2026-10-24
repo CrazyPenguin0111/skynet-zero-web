@@ -1,0 +1,1500 @@
+using SkynetZero;
+using System.Text.RegularExpressions;
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+//TODO fix style for this.
+namespace FileIO5D
+{
+    public enum TokenType
+    {
+        UNKNOWN, TURNINDICATOR, HALFTURNINDICATOR, SAN, TEMPORALCOORD, TURNTERMINATOR, PROMOTION, FULLCOORDINATE, HALFCOORDINATE,
+        CASTLE, LONGCASTLE, NULLMOVE, COMMENT, PRESENTSHIFTED, LAYERCREATED, ARROWS, HIGHLIGHTS, SIDELINE, DESCRIPTION, RESULT
+    }
+
+    public class FENParser
+    {
+        // Lowercase designators are emitted for black pieces. The lookahead
+        // distinguishes them from piece-letter-omitted pawn coordinates and
+        // short pawn SAN: lowercase designators are accepted only for the
+        // full origin+destination form emitted by Move.GetPgn().
+        private const string PieceDesignatorPattern = "(?:[NBRQSKCYUDPW]|[nbrqskcyudpw](?=[a-z]\\d{1,2}\\S*[a-z]\\d{1,2}))?";
+        public static readonly string STDBOARDFEN = "[r*nbqk*bnr*/p*p*p*p*p*p*p*p*/8/8/8/8/P*P*P*P*P*P*P*P*/R*NBQK*BNR*:0:1:w]";
+        public static readonly string STD_PRINCESS_BOARDFEN = "[r*nbsk*bnr*/p*p*p*p*p*p*p*p*/8/8/8/8/P*P*P*P*P*P*P*P*/R*NBSK*BNR*:0:1:w]";
+        public static readonly string STD_DEFENDEDPAWN_BOARDFEN = "[r*qbnk*bnr*/p*p*p*p*p*p*p*p*/8/8/8/8/P*P*P*P*P*P*P*P*/R*QBNK*BNR*:0:1:w]";
+
+        public static string[]? FileToLines(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                Console.WriteLine($"File not found: {filePath}");
+                return null;
+            }
+            string content = File.ReadAllText(filePath);
+            string[] linesarray = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            return linesarray;
+        }
+        private struct PgnFenBoard {
+            public string Fen;
+            public string Timeline;
+            public int Turn;
+            public bool IsBlack;
+
+            public PgnFenBoard(string s) {
+                var splitted = s.Split(':').Select(x => x.Trim()).ToArray();
+                this.Fen = splitted[0];
+                this.Timeline = splitted[1].TrimEnd('L') + "L";
+                this.Turn = int.Parse(splitted[2]);
+                this.IsBlack = splitted[3].Single() switch { 'w' => false, 'b' => true, _ => throw new Exception("invalid color") };
+            }
+
+            public PgnFenBoard NormalizeSign() {
+                return new PgnFenBoard() {
+                    Fen = this.Fen,
+                    Timeline = this.Timeline[0] == '-' ? this.Timeline : ("+" + this.Timeline.TrimStart('+')),
+                    Turn = this.Turn,
+                    IsBlack = this.IsBlack
+                };
+            }
+        }
+        public static GameStateManager FromPGN(string fullPgn) {
+            var lines = fullPgn.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').Select(x => x.Trim()).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
+            var fens = lines.Reverse().SkipWhile(x => char.IsDigit(x[0])).TakeWhile(x => x[0] == '[' && !x.Contains('"')).Reverse().Select(x => new PgnFenBoard(x.Substring(1, x.Length - 2))).ToArray();
+
+            var headerFields = lines.TakeWhile(x => x[0] == '[' && x.Contains('"'))
+                .Select(x => x.Substring(1, x.Length - 2).Split(' ').Where(x => x.Length > 0).ToArray())
+                .ToDictionary(x => x[0], x => x[1].Trim('"'));
+
+            bool isEven = fens.Any(x => x.Timeline == "+0" || x.Timeline == "-0");
+
+            var timelines = fens.Select(x => x.NormalizeSign()).GroupBy(x => x.Timeline);
+            var parsedTls = new Dictionary<string, Timeline>();
+            int cosmeticTurnOffset = timelines.Min(grp => grp.First().Turn);
+
+            Board firstBoard = null!;
+            foreach (var tl in timelines) {
+                var ordered = tl.OrderBy(x => x.Turn + (x.IsBlack ? 0.5f : 0)).ToArray();
+                var boards = ordered.Select(x => BoardFromString(x.Fen)).ToList();
+                Timeline? newTimeline;
+                if (!parsedTls.TryGetValue(tl.Key, out newTimeline)) {
+                    newTimeline = new Timeline(boards[0], !ordered[0].IsBlack, ordered[0].Turn - cosmeticTurnOffset, ParseLayer(tl.Key.TrimEnd('L'), isEven));
+                    if (firstBoard == null) {
+                        firstBoard = boards[0];
+                    }
+                    parsedTls.Add(tl.Key, newTimeline);
+                    boards.RemoveAt(0);
+                }
+                foreach (var b in boards) {
+                    RestoreInitialEnPassant(newTimeline, b);
+                    newTimeline.AddMove(b);
+                }
+            }
+
+
+            var gsm = new GameStateManager(parsedTls.Values.ToArray(), firstBoard.Width, firstBoard.Height, isEven, GameStateManager.WHITE, parsedTls.Values.Min(x=>x.TStart), null!);
+            return gsm;
+        }
+        public static GameStateManager? ShadSTDGSM(string fileLocation) => ShadSTDGSMFromString(File.ReadAllText(fileLocation));
+        public static GameStateManager? ShadSTDGSMFromString(string multiverseFen)
+        {
+            //Read in the file, initialize variables.
+            string[] lines = multiverseFen.Replace("\r\n","\n").Replace("\r","\n").Split('\n');
+            List<string> fenBoards = new List<string>();
+            List<string> SANLines = new List<string>();
+            bool evenStarters = false;
+
+            //Separate moves by header, FEN, SAN
+            Dictionary<string, string> headers = new Dictionary<string, string>();
+            foreach (string line in lines)
+            {
+                string trimmmedLine = line.Trim();
+                if (trimmmedLine.Length == 0)
+                {
+                    continue;
+                }
+                if (trimmmedLine[0] == '[')
+                {
+                    if (trimmmedLine.Contains(":") && !trimmmedLine.Contains("\""))
+                    {
+                        fenBoards.Add(trimmmedLine);
+                        if (trimmmedLine.Contains("-0"))
+                        {
+                            evenStarters = true;
+                        }
+                        continue;
+                    }
+                    int bracketIndex = trimmmedLine.IndexOf('[');
+                    int quoteIndex = trimmmedLine.IndexOf("\"");
+                    int lastQuoteIndex = trimmmedLine.LastIndexOf("\"");
+                    string headerKey = trimmmedLine.Substring(bracketIndex + 1, quoteIndex - (bracketIndex + 1)).Trim().ToLower();
+                    string headerValue = trimmmedLine.Substring(quoteIndex + 1, lastQuoteIndex - quoteIndex - 1).Trim();
+                    headers.Add(headerKey, headerValue);
+                }
+                else
+                {
+                    SANLines.Add(line);
+                }
+            }
+
+            //Parse Headers.
+            string? size = null;
+            string? variant = null;
+            string? color = null;
+            if (headers.ContainsKey("size")) size = headers["size"];
+            if (headers.ContainsKey("board")) variant = headers["board"];
+            if (headers.ContainsKey("color")) color = headers["color"];
+
+            //Determine if there is a variant that can be pulled from.
+            GameStateManager? gsm = null;
+            Timeline[] starters;
+            if (variant != null)
+            {
+                string boardChosen = variant.Trim();
+                if (boardChosen.Equals("custom", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (size == null)
+                    {
+                        return null;
+                    }
+                    string[] dimensions = size.Split('x');
+                    int width = int.Parse(dimensions[0]);
+                    int height = int.Parse(dimensions[1]);
+                    starters = InitialHistories(fenBoards, width, height, evenStarters);
+                    gsm = new GameStateManager(starters, width, height, evenStarters, true, starters[0].Layer, null!);
+                }
+                else if (boardChosen.Equals("standard", StringComparison.OrdinalIgnoreCase))
+                {
+                    starters = new Timeline[1];
+                    starters[0] = GetTimelineFromString(STDBOARDFEN, 8, 8, false)!;
+                    gsm = new GameStateManager(starters, 8, 8, false, true, starters[0].Layer, null!);
+                }
+                else if (boardChosen.Equals("standard-princess", StringComparison.OrdinalIgnoreCase))
+                {
+                    starters = new Timeline[1];
+                    starters[0] = GetTimelineFromString(STD_PRINCESS_BOARDFEN, 8, 8, false)!;
+                    gsm = new GameStateManager(starters, 8, 8, false, true, starters[0].Layer, null!);
+                }
+                else if (boardChosen.Equals("standard-t0", StringComparison.OrdinalIgnoreCase))
+                {
+                    starters = new Timeline[1];
+                    starters[0] = GetTimelineFromString("[r*nbqk*bnr*/p*p*p*p*p*p*p*p*/8/8/8/8/P*P*P*P*P*P*P*P*/R*NBQK*BNR*:0:0:b]", 8, 8, false)!;
+                    starters[0].AddNullMove();
+                    gsm = new GameStateManager(starters, 8, 8, false, true, starters[0].Layer, null!);
+                }
+            }
+            else
+            {
+                return null;
+            }
+
+            //reads color header.
+            if (color != null)
+            {
+                gsm!.Color = color.Contains("white");
+            }
+
+            //Turns into tokens.
+            string[] regexs =
+            {
+                "^/",
+                "^\\d+[WwBb]?\\.",
+                "^\\([+\\-]?\\d+T-?\\d+\\)" + PieceDesignatorPattern + "[a-z]?\\d{0,2}[a-z]\\d{1,2}(>+)?x?\\([+\\-]?\\d+T-?\\d+\\)\\S+(=[NBRQSKCYUDPW])?",
+                "^\\([+\\-]?\\d+T-?\\d+\\)" + PieceDesignatorPattern + "[a-z]?\\d{0,2}x?[a-z]\\d{1,2}(=[NBRQSKCYUDPW])?",
+                "^" + PieceDesignatorPattern + "[a-z]?\\d{0,2}x?[a-z]\\d{1,2}(=[NBRQSKCYUDPW])?",//TODO rework this. SAN Token
+                "^(\\([+\\-]?\\d+T-?\\d+\\))?0000",
+                "^(\\([+\\-]?\\d+T-?\\d+\\))?O-O-O",
+                "^(\\([+\\-]?\\d+T-?\\d+\\))?O-O",
+                "^\\(~T[+\\-]?(\\d+)\\)",
+                "^\\(>L([+\\-]?\\d+)\\)",
+                "^(?:1-0|0-1|1/2-1/2|\\*)"
+            };
+            TokenType[] regextokens =
+            {
+                TokenType.TURNTERMINATOR,
+                TokenType.TURNINDICATOR,
+                TokenType.FULLCOORDINATE,
+                TokenType.HALFCOORDINATE,
+                TokenType.SAN,
+                TokenType.NULLMOVE,
+                TokenType.CASTLE,
+                TokenType.LONGCASTLE,
+                TokenType.PRESENTSHIFTED,
+                TokenType.LAYERCREATED,
+                TokenType.RESULT,
+            };
+            List<string> tokenString = new List<string>();
+            List<TokenType> tokenTypes = new List<TokenType>();
+            int lineIndex = 0;
+            int stringIndex = 0;
+            while (lineIndex < SANLines.Count)
+            {
+                if (SANLines[lineIndex][stringIndex] == '{')
+                {
+                    string comment = "";
+                    while (SANLines[lineIndex][stringIndex] != '}')
+                    {
+                        comment += SANLines[lineIndex][stringIndex];
+                        stringIndex++;
+                        if (stringIndex >= SANLines[lineIndex].Length)
+                        {
+                            stringIndex = 0;
+                            lineIndex++;
+                            if (lineIndex >= SANLines.Count)
+                            {
+                                throw new Exception("Invalid File. Comment does not contain } to end it");
+                            }
+                        }
+                    }
+                    comment += SANLines[lineIndex][stringIndex];
+                    tokenString.Add(comment);
+                    tokenTypes.Add(TokenType.COMMENT);
+                    stringIndex++;
+                }
+                for (int i = 0; i <= regexs.Length; i++)
+                {
+                    if (i == regexs.Length)
+                    {
+                        if (!char.IsWhiteSpace(SANLines[lineIndex][stringIndex]))
+                        {
+                            string remaining = SANLines[lineIndex].Substring(stringIndex);
+                            throw new FormatException($"Unrecognized PGN token at line {lineIndex + 1}, column {stringIndex + 1}: {remaining}");
+                        }
+                        stringIndex++;
+                        break;
+                    }
+                    Match m = Regex.Match(SANLines[lineIndex].Substring(stringIndex), regexs[i]);
+                    if (!m.Success) continue;
+                    tokenString.Add(m.Value);
+                    tokenTypes.Add(regextokens[i]);
+                    stringIndex += m.Length;
+                    break;
+                }
+                if (stringIndex >= SANLines[lineIndex].Length)
+                {
+                    stringIndex = 0;
+                    lineIndex++;
+                }
+            }
+
+            //Parse the tokens.
+            List<Turn> compiledTurns = new List<Turn>();
+            List<Move> compiledMoves = new List<Move>();
+            for (int i = 0; i < tokenString.Count; i++)
+            {
+                switch (tokenTypes[i])
+                {
+                    case TokenType.COMMENT:
+                    case TokenType.PRESENTSHIFTED:
+                    case TokenType.LAYERCREATED:
+                    case TokenType.RESULT:
+                        //eventually use this for analysis, right now throw it away.
+                        break;
+                    case TokenType.TURNINDICATOR:
+                    case TokenType.TURNTERMINATOR:
+                        goto case TokenType.HALFTURNINDICATOR;
+                    case TokenType.HALFTURNINDICATOR:
+                        if (compiledMoves.Count > 0)
+                        {
+                            compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                            ApplyReplayMoves(gsm!, compiledMoves, submit: true);
+                            compiledMoves.Clear();
+                        }
+                        break;
+                    case TokenType.FULLCOORDINATE:
+                    case TokenType.HALFCOORDINATE:
+                    case TokenType.SAN:
+                        if (tokenString[i].Contains('='))
+                        {
+                            Move sanPromotionMove = PromotionStringToMove(gsm!, tokenString[i], evenStarters);
+                            compiledMoves.Add(sanPromotionMove);
+                            break;
+                        }
+                        Move m = GetShadMove(gsm!, tokenString[i], evenStarters);
+                        compiledMoves.Add(m);
+                        break;
+                    case TokenType.NULLMOVE://TODO NEED NULL MOVES.
+                        Move nullMove = GetNullMove(tokenString[i], evenStarters);
+                        if (!gsm!.Color)
+                        {
+                            nullMove.SwapColor();
+                        }
+                        compiledMoves.Add(nullMove);
+                        break;
+                    case TokenType.PROMOTION:
+                        Move promotionMove = PromotionStringToMove(gsm!, tokenString[i], evenStarters);
+                        compiledMoves.Add(promotionMove);
+                        break;
+                    case TokenType.CASTLE:
+                    case TokenType.LONGCASTLE:
+                        Move castleMove = FindCastleMove(gsm!, tokenString[i], evenStarters);
+                        compiledMoves.Add(castleMove);
+                        break;
+                    case TokenType.UNKNOWN:
+                        throw new Exception("Unknown token detected");
+                }
+            }
+            //Add Final Move if needed.
+            if (compiledMoves.Count > 0)
+            {
+                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                ApplyReplayMoves(gsm!, compiledMoves, submit: false);
+                compiledMoves.Clear();
+            }
+            return gsm;
+        }
+
+        private static void ApplyReplayMoves(GameStateManager state, IReadOnlyList<Move> moves, bool submit)
+        {
+            foreach (Move move in moves)
+            {
+                if (!state.MakeMove(move, true))
+                {
+                    throw new FormatException($"Illegal PGN move: {move}");
+                }
+            }
+            if (submit && !state.SubmitMoves())
+            {
+                throw new FormatException("PGN half-turn separator encountered before the turn was complete.");
+            }
+        }
+
+        public static GameStateManager? Parse5dStudy(string fileLocation)
+        {
+            //Read in the file, initialize variables.
+            string[]? lines = FileToLines(fileLocation);
+            if (lines == null) return null;
+            List<string> fenBoards = new List<string>();
+            string SANLines = "";
+            bool evenStarters = false;
+
+            //Separate moves by header, FEN, SAN
+            Dictionary<string, string> headers = new Dictionary<string, string>();
+            foreach (string line in lines)
+            {
+                string trimmmedLine = line.Trim();
+                if (trimmmedLine.Length == 0)
+                {
+                    continue;
+                }
+                if (trimmmedLine[0] == '[')
+                {
+                    if (trimmmedLine.Contains(":") && !trimmmedLine.Contains("\""))
+                    {
+                        fenBoards.Add(trimmmedLine);
+                        if (trimmmedLine.Contains("-0"))
+                        {
+                            evenStarters = true;
+                        }
+                        continue;
+                    }
+                    int bracketIndex = trimmmedLine.IndexOf('[');
+                    int quoteIndex = trimmmedLine.IndexOf("\"");
+                    int lastQuoteIndex = trimmmedLine.LastIndexOf("\"");
+                    string headerKey = trimmmedLine.Substring(bracketIndex + 1, quoteIndex - (bracketIndex + 1)).Trim().ToLower();
+                    string headerValue = trimmmedLine.Substring(quoteIndex + 1, lastQuoteIndex - quoteIndex - 1).Trim();
+                    headers.Add(headerKey, headerValue);
+                }
+                else
+                {
+                    SANLines += line + " \n";
+                }
+            }
+
+            //Parse Headers.
+            string? size = null;
+            string? variant = null;
+            string? color = null;
+            if (headers.ContainsKey("size")) size = headers["size"];
+            if (headers.ContainsKey("board")) variant = headers["board"];
+            if (headers.ContainsKey("color")) color = headers["color"];
+
+            //Determine if there is a variant that can be pulled from.
+            GameStateManager? gsm = null;
+            Timeline[] starters;
+            if (variant != null)
+            {
+                string boardChosen = variant.Trim();
+                if (boardChosen.Equals("custom", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (size == null)
+                    {
+                        return null;
+                    }
+                    string[] dimensions = size.Split('x');
+                    int width = int.Parse(dimensions[0]);
+                    int height = int.Parse(dimensions[1]);
+                    starters = InitialHistories(fenBoards, width, height, evenStarters);
+                    gsm = new GameStateManager(starters, width, height, evenStarters, true, starters[0].Layer, null!);
+                }
+                else if (boardChosen.Equals("standard", StringComparison.OrdinalIgnoreCase))
+                {
+                    starters = new Timeline[1];
+                    starters[0] = GetTimelineFromString(STDBOARDFEN, 8, 8, false)!;
+                    gsm = new GameStateManager(starters, 8, 8, false, true, starters[0].Layer, null!);
+                }
+                else if (boardChosen.Equals("standard-princess", StringComparison.OrdinalIgnoreCase))
+                {
+                    starters = new Timeline[1];
+                    starters[0] = GetTimelineFromString(STD_PRINCESS_BOARDFEN, 8, 8, false)!;
+                    gsm = new GameStateManager(starters, 8, 8, false, true, starters[0].Layer, null!);
+                }
+            }
+            else
+            {
+                return null;
+            }
+
+            //reads color header. TODO not correctly set for T0......
+            if (color != null)
+            {
+                gsm!.Color = color.ToLower().Contains("white");
+                if(!gsm.Color)
+                {
+                    gsm.StartColor = false;
+                }
+            }
+            TreeNode<string> tokenTreeString = new TreeNode<string>("");
+            TreeNode<TokenType> tokenTree = new TreeNode<TokenType>(TokenType.UNKNOWN);
+
+            //Turns into tokens.
+            TokenizeSideline(tokenTreeString, tokenTree, SANLines);
+            Console.WriteLine(tokenTreeString.ToString());
+            //Parse the tokens.
+            List<Turn> compiledTurns = new List<Turn>();
+            List<Move> compiledMoves = new List<Move>();
+            TreeNode<string> tokenStringIndex = tokenTreeString;
+            TreeNode<TokenType> tokenTreeIndex = tokenTree;
+            while (tokenTreeIndex.Children.Count > 0)
+            {
+                tokenTreeIndex = tokenTreeIndex.Children[0];
+                tokenStringIndex = tokenStringIndex.Children[0];
+                for(int i = 0; i < tokenTreeIndex.Children.Count; i++)
+                {
+                    TreeNode<string> childStringIndex = tokenStringIndex.Children[i];
+                    TreeNode<TokenType> childTokenIndex = tokenTreeIndex.Children[i];
+                    string tokenString = childStringIndex.value;
+                    switch (childTokenIndex.value)
+                    {
+                        case TokenType.COMMENT:
+                        case TokenType.PRESENTSHIFTED:
+                        case TokenType.LAYERCREATED:
+                            //eventually use this for analysis, right now throw it away.
+                            break;
+                        case TokenType.TURNINDICATOR:
+                        case TokenType.TURNTERMINATOR:
+                            goto case TokenType.HALFTURNINDICATOR;
+                        case TokenType.HALFTURNINDICATOR:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm!.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            break;
+                        case TokenType.FULLCOORDINATE:
+                        case TokenType.HALFCOORDINATE:
+                        case TokenType.SAN:
+                            if (tokenString.Contains('='))
+                            {
+                                Move sanPromotionMove = PromotionStringToMove(gsm!, tokenString, evenStarters);
+                                compiledMoves.Add(sanPromotionMove);
+                                break;
+                            }
+                            Move m = GetShadMove(gsm!, tokenString, evenStarters);
+                            compiledMoves.Add(m);
+                            break;
+                        case TokenType.NULLMOVE:
+                            Move nullMove = GetNullMove(tokenString, evenStarters);
+                            if (!gsm!.Color)
+                            {
+                                nullMove.SwapColor();
+                            }
+                            compiledMoves.Add(nullMove);
+                            break;
+                        case TokenType.PROMOTION:
+                            Move promotionMove = PromotionStringToMove(gsm!, tokenString, evenStarters);
+                            compiledMoves.Add(promotionMove);
+                            break;
+                        case TokenType.CASTLE:
+                        case TokenType.LONGCASTLE:
+                            Move castleMove = FindCastleMove(gsm!, tokenString, evenStarters);
+                            compiledMoves.Add(castleMove);
+                            break;
+                        case TokenType.ARROWS:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm!.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            ParseArrows(tokenString, gsm!);
+                            break;
+                        case TokenType.HIGHLIGHTS:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm!.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            ParseHighlights(tokenString, gsm!);
+                            break;
+                        case TokenType.DESCRIPTION:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm!.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            gsm!.Index.AT.Annotation = tokenString.Substring(3, tokenString.Length - 4);
+                            break;
+                        case TokenType.SIDELINE:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm!.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            //Rewind to the previous move to add a sideline.
+                            gsm!.RewindToParent(gsm.Index.Parent!);
+                            ParseSideline(childStringIndex, childTokenIndex, gsm);
+                            //go to the mainline after this.
+                            gsm.ProgressTree(0);
+                            break;
+                        case TokenType.UNKNOWN:
+                            throw new Exception("Unknown token detected");
+                    }
+                }
+            }
+            //Add Final Move if needed.
+            if (compiledMoves.Count > 0)
+            {
+                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                compiledMoves.Clear();
+                bool turnStatus = gsm!.MakeTurn(compiledTurns[compiledTurns.Count - 1]);
+                if (!turnStatus)
+                {
+                    throw new Exception("Turn not properly added to gamestate.");
+                }
+            }
+            return gsm;
+        }
+
+
+        /// <summary>
+        /// Parses a FEN, returns a timeline TODO must ensure that fen boards for the same timeline are properly parsed.
+        /// </summary>
+        /// <param name="board"></param>
+        /// <param name="width"></param>
+        /// <param name="height"></param>
+        /// <param name="evenStarters"></param>
+        /// <returns></returns>
+        public static Timeline? GetTimelineFromString(string board, int width, int height, bool evenStarters)
+        {
+            board = board.Substring(1, board.Length - 2);
+            Board b = new Board(width, height);
+            string[] fields = board.Split(':');
+            string[] rows = fields[0].Split('/');
+            int row = 0;
+            int col = 0;
+            try
+            {
+                foreach (string s in rows)
+                {
+                    for (int charat = 0; charat < s.Length; charat++)
+                    {
+                        char c = s[charat];
+                        if (c >= 'A')
+                        {
+                            int piece = Array.IndexOf(Board.PieceChars, c);
+                            if (charat < s.Length - 1 && s[charat + 1] == '*')
+                            {
+                                piece *= -1;
+                                charat++;
+                            }
+                            b.SetSquare(col, height - row - 1, piece);
+                            col++;
+                        }
+                        else if (c <= '9' && c >= '1')
+                        {
+                            for (int i = 0; i < c - '0'; i++)
+                            {
+                                b.SetSquare(col, height - row - 1, Board.EMPTYSQUARE);
+                                col++;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("There was an error reading the FEN provided");
+                            col++;
+                        }
+                    }
+                    row++;
+                    col = 0;
+                }
+            }
+            catch (IndexOutOfRangeException)
+            {
+                Console.WriteLine("There was an indexOutOfBounds -- this probably means the height or width was incorrectly provided");
+                Console.WriteLine("Height of: " + (height - row - 1) + "Width of: " + (col - height - 1));
+                return null;
+            }
+
+            Timeline t = new Timeline(b, fields[3][0] == 'w', int.Parse(fields[2]), ParseLayer(fields[1], evenStarters));
+            return t;
+        }
+
+        public static Board BoardFromString(string fen) { // fen without [], just `r*nbkq*bnr*/p*p*p*p*1p*p*p*/8/8/8/8/P*P*P*P*1P*P*P*/R*NBQK*BNR*`
+
+            string[] rows = fen.Split('/');
+            var lens = rows.Select(x => x.Replace("*", "").Sum(x => char.IsDigit(x) ? int.Parse(x.ToString()) : 1)).Distinct();
+            if (lens.Count() > 1) {
+                throw new Exception("some rows are of different lengths");
+            }
+            var height = lens.Single();
+            Board b = new Board(height, rows.Length);
+            int row = 0;
+            int col = 0;
+            foreach (string s in rows) {
+                for (int charat = 0; charat < s.Length; charat++) {
+                    char c = s[charat];
+                    if (c >= 'A') {
+                        int piece = Array.IndexOf(Board.PieceChars, c);
+                        if (charat < s.Length - 1 && s[charat + 1] == '*') {
+                            piece *= -1;
+                            charat++;
+                        }
+                        b.SetSquare(col, height - row - 1, piece);
+                        col++;
+                    } else if (c <= '9' && c >= '1') {
+                        for (int i = 0; i < c - '0'; i++) {
+                            b.SetSquare(col, height - row - 1, Board.EMPTYSQUARE);
+                            col++;
+                        }
+                    } else {
+                        Console.WriteLine("There was an error reading the FEN provided");
+                        col++;
+                    }
+                }
+                row++;
+                col = 0;
+            }
+            return b;
+        }
+
+        /// <summary>
+        /// Takes a turn string and retuns Turn structure object.
+        /// </summary>
+        /// <param name="g">gamestate that is being parsed for. Required since certain moves are ambigious and you must search for the piece.</param>
+        /// <param name="turnstr">Turn to parse</param>
+        /// <param name="evenStarters">whether there are an even number of Starters</param> 
+        /// <returns>Parsed Turn Object</returns>
+        public static Turn? StringToTurn(GameState g, string turnstr, bool evenStarters)
+        {
+            if (turnstr.Contains("."))
+            {
+                turnstr = turnstr.Substring(turnstr.IndexOf('.') + 1);
+            }
+            turnstr = turnstr.Trim();
+            if (turnstr.Length <= 1)
+            {
+                return null;
+            }
+            string[] movesStr = turnstr.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            Move?[] moves = new Move?[movesStr.Length];
+            for (int i = 0; i < movesStr.Length; i++)
+            {
+                string token = movesStr[i];
+                if (ShouldIgnoreToken(token))
+                {
+                    moves[i] = null;
+                    continue;
+                }
+                if (IsSpecialMove(token))
+                {
+                    if (token.Contains("O-O"))
+                    {
+                        moves[i] = FindCastleMove(g, token, evenStarters);
+                    }
+                    else if (token.Contains("="))
+                    {
+                        moves[i] = PromotionStringToMove(g, token, evenStarters);
+                    }
+                    else if (token.Contains("0000"))
+                    {
+                        CoordFive boardOrigin = new CoordFive();
+                        boardOrigin.Color = g.Color;
+                        if (token.Contains("("))
+                        {
+                            boardOrigin.Add(TemporalToCoord(token.Substring(token.IndexOf('('), token.IndexOf(')') + 1), evenStarters));
+                        }
+                        else
+                        {
+                            boardOrigin.T = g.GetTimeline(0)!.TEnd;
+                        }
+                        Move nullMove = new Move(boardOrigin, boardOrigin);
+                        nullMove.SpecialType = Move.NULLMOVE;
+                        moves[i] = nullMove;
+                    }
+                }
+                else
+                {
+                    moves[i] = GetShadMove(g, token, evenStarters);
+                }
+            }
+            return new Turn(moves!);
+        }
+
+        private static bool IsSpecialMove(string str)
+        {
+            return str.Contains("O-O") || str.Contains("=") || str.Contains("0000");
+        }
+
+        private static bool ShouldIgnoreToken(string str)
+        {
+            return str[0] == '(' && str[str.Length - 1] == ')';
+        }
+
+        private static Move FindCastleMove(GameState g, string token, bool evenStarters)
+        {
+            bool side = true;
+            CoordFive temporalOrigin;
+            if (token.Contains("O-O-O"))
+            {
+                side = false;
+            }
+            else if (token.Contains("O-O"))
+            {
+                side = true;
+            }
+            if (token.Contains("("))
+            {
+                temporalOrigin = new CoordFive(TemporalToCoord(token.Substring(token.IndexOf('('), token.IndexOf(')') + 1), evenStarters), g.Color);
+            }
+            else
+            {
+                temporalOrigin = new CoordFive(0, 0, g.GetTimeline(0)!.TEnd, 0, g.Color);
+            }
+            Board? origin = g.GetBoard(temporalOrigin);
+            int target = g.Color ? -1 * (int)Board.Piece.WKING : -1 * (int)Board.Piece.BKING;
+            if (origin != null)
+            {
+                CoordFive? spatialOrigin = MoveGenerator.FindPiece(origin, target);
+                if (spatialOrigin != null)
+                {
+                    temporalOrigin.Add(spatialOrigin);
+                }
+                CoordFive? castleDest = MoveGenerator.KingCanCastle(origin, temporalOrigin, side);
+                Move castle = new Move(temporalOrigin, castleDest!);
+                return castle;
+            }
+            return new Move(temporalOrigin, temporalOrigin);
+        }
+
+        public static Move PromotionStringToMove(GameState g, string move, bool evenStarters)
+        {
+            int marker = move.IndexOf('=');
+            if (marker < 0 || marker + 1 >= move.Length) throw new FormatException($"Missing promotion piece: {move}");
+            Move returnMove = GetShadMove(g, move.Substring(0, marker), evenStarters);
+            // Check/mate and annotation suffixes follow the promotion piece.
+            int promotionType = Board.PieceCharToInt(char.ToUpperInvariant(move[marker + 1]));
+            if (!g.Color)
+            {
+                promotionType += Board.NUMTYPES;
+            }
+            returnMove.SpecialType = promotionType;
+            return returnMove;
+        }
+
+        public static Move GetShadMove(GameState g, string move, bool evenStarters)
+        {
+            // A leading '+' inside a temporal coordinate names the positive
+            // zero timeline in even layouts; it is not a check annotation.
+            move = System.Text.RegularExpressions.Regex.Replace(move, @"[~!#]|(?<!\()\+", "");
+            if (move.Contains("(") && move.IndexOf("(") != move.LastIndexOf("("))
+            {
+                Move parsedMove = FullStringToCoord(move, evenStarters);
+                if (!g.Color)
+                {
+                    parsedMove.SwapColor();
+                }
+                return parsedMove;
+            }
+            return AmbiguousStringToMove(g, move, evenStarters)!;
+        }
+
+        // Several 5DFEN boards may describe successive times of one initial
+        // timeline (not several distinct timelines), notably Turn Zero.
+        private static Timeline[] InitialHistories(IEnumerable<string> fens, int width, int height, bool even)
+        {
+            var boards = fens.Select(fen => GetTimelineFromString(fen, width, height, even)
+                ?? throw new FormatException("Invalid initial 5DFEN board."));
+            return boards.GroupBy(line => line.Layer).OrderBy(group => group.Key).Select(group =>
+            {
+                var ordered = group.OrderBy(line => 2 * line.TStart + (line.ColorStart ? 0 : 1)).ToArray();
+                var line = ordered[0];
+                int previous = 2 * line.TStart + (line.ColorStart ? 0 : 1);
+                foreach (var next in ordered.Skip(1))
+                {
+                    int half = 2 * next.TStart + (next.ColorStart ? 0 : 1);
+                    if (half != previous + 1) throw new FormatException("Initial timeline history is not contiguous.");
+                    RestoreInitialEnPassant(line, next.GetPlayableBoard());
+                    line.AddMove(next.GetPlayableBoard());
+                    previous = half;
+                }
+                return line;
+            }).ToArray();
+        }
+
+        // 5DFEN stores piece/unmoved flags, not an en-passant field. Recover it
+        // from consecutive boards, as the external engine's position reader does.
+        internal static void RestoreInitialEnPassant(Timeline line, Board current)
+        {
+            Board previous = line.GetPlayableBoard();
+            int direction = line.ColorPlayable ? 1 : -1;
+            for (int y = 0; y < current.Height; y++)
+            for (int x = 0; x < current.Width; x++)
+            {
+                int piece = previous.GetSquare(x, y);
+                int type = Math.Abs(piece) - (line.ColorPlayable ? 0 : Board.NUMTYPES);
+                int destination = y + 2 * direction, middle = y + direction;
+                if (piece >= 0 || type is not ((int)Board.Piece.WPAWN or (int)Board.Piece.WBRAWN) ||
+                    destination < 0 || destination >= current.Height || current.GetSquare(x, y) != 0 ||
+                    previous.GetSquare(x, destination) != 0 || current.GetSquare(x, destination) != -piece ||
+                    previous.GetSquare(x, middle) != 0 || current.GetSquare(x, middle) != 0) continue;
+                if (current.EnPassentSquare != null) throw new FormatException("Ambiguous en-passant history.");
+                current.EnPassentSquare = new(x, middle, line.TEnd, line.Layer, line.ColorPlayable);
+            }
+        }
+
+        private static bool HasExplicitPieceDesignator(string move, int index)
+        {
+            if (index < 0 || index >= move.Length) return false;
+            char candidate = move[index];
+            char upper = char.ToUpperInvariant(candidate);
+            int piece = Board.PieceCharToInt(upper);
+            if (piece <= 0 || piece > Board.NUMTYPES) return false;
+            if (char.IsUpper(candidate)) return true;
+            return Regex.Matches(move[(index + 1)..], "[a-z]\\d+").Count >= 2;
+        }
+
+        public static Move GetNullMove(string move, bool evenStarters)
+        {
+            Move nullMove = Move.NULL.Clone();
+            Match temporalPositionMatch = Regex.Match(move, "\\([+\\-]?\\d+T-?\\d+\\)");
+            if (temporalPositionMatch.Success)
+            {
+                CoordFive temporalPosition = TemporalToCoord(temporalPositionMatch.Value, evenStarters);
+                nullMove.Origin.Add(temporalPosition);
+                nullMove.Dest.Add(temporalPosition);
+            }
+            return nullMove;
+        }
+
+        public static Move FullStringToCoord(string move, bool evenStarters)
+        {
+            string coord1;
+            if (move.Contains(">"))
+            {
+                coord1 = move.Substring(0, move.IndexOf('>'));
+            }
+            else
+            {
+                coord1 = move.Substring(0, move.LastIndexOf('('));
+            }
+            string coord2 = move.Substring(move.LastIndexOf('('));
+            return new Move(HalfStringToCoord(coord1, evenStarters), HalfStringToCoord(coord2, evenStarters));
+        }
+
+        /// <summary>
+        /// Gets an ambiguous Move, (only spatial moves work, this will not get an ambigious temporal move)
+        /// </summary>
+        /// <param name="g">gamestate</param>
+        /// <param name="move">ambiguous move string</param>
+        /// <param name="evenStarters">whether there are +/- 0 or just 0. if true -0 =0L and +0 =1L </param>
+        /// <returns></returns>
+        public static Move? AmbiguousStringToMove(GameState g, string move, bool evenStarters)
+        {
+            CoordFive dest = HalfStringToCoord(move, evenStarters);
+            dest.Color = g.Color;
+            if (dest.T == -1)
+            {
+                dest.T = g.GetTimeline(0)!.TEnd;
+            }
+            int piece;
+            int pieceIndex = move.Contains(")") ? move.IndexOf(')') + 1 : 0;
+            if (HasExplicitPieceDesignator(move, pieceIndex))
+            {
+                piece = Board.PieceCharToInt(char.ToUpperInvariant(move[pieceIndex]));
+            }
+            else
+            {
+                piece = (int)Board.Piece.WPAWN;
+            }
+            piece = g.Color ? piece : piece + Board.NUMTYPES;
+            CoordFive ambiguity = GetAmbiguityInfo(move);
+            int file = ambiguity.X;
+            int rank = ambiguity.Y;
+            CoordFive? origin = MoveGenerator.ReverseLookup(g, dest, piece, rank, file);
+            if (origin == null)
+            {
+                Console.WriteLine("Could not find ReverseLookup for this move: " + move);
+                return null;
+            }
+            return new Move(origin, dest);
+        }
+
+        public static CoordFive GetAmbiguityInfo(string move)
+        {
+            CoordFive temp = new CoordFive(-1, -1, -1, -1);
+            move = move.Trim();
+            int index = 0;
+            int rindex = move.Length;
+            if (move.Contains(")"))
+            {
+                index = move.IndexOf(")") + 1;
+            }
+            if (HasExplicitPieceDesignator(move, index))
+            {
+                index++;
+            }
+            if (move[index] == 'x')
+            {
+                index++;
+            }
+            if (rindex - index >= 3 && move[rindex - 3] == 'x')
+            {
+                rindex -= 3;
+            }
+            else
+            {
+                rindex -= 2;
+            }
+            move = move.Substring(index, rindex - index);
+            if (move.Length == 2)
+            {
+                temp = SANToCoord(move);
+                temp.T = -1;
+                temp.L = -1;
+            }
+            else if (move.Length == 1)
+            {
+                if (move[0] >= 'a')
+                {
+                    temp.X = move[0] - 'a';
+                }
+                else
+                {
+                    temp.Y = int.Parse(move) - 1;
+                }
+            }
+            return temp;
+        }
+
+        /// <summary>
+        /// Gets a coord from half of a move. Does not enter the correct color into the coordinate.
+        /// </summary>
+        /// <param name="halfmove">string move to parse</param>
+        /// <param name="evenStarters">boolean whether there are even amounts of starters, ie. +/- 0</param>
+        /// <returns></returns>
+        public static CoordFive HalfStringToCoord(string halfmove, bool evenStarters)
+        {
+            //match a temporal coordinate. and parse it
+            Match temporalMatch = Regex.Match(halfmove, "\\(-?\\+?\\d*T-?\\d*\\)");
+            string temporalCoordString = "";
+            string sanCoordString = halfmove;
+            CoordFive temporalCoord;
+            if (temporalMatch.Success)
+            {
+                temporalCoordString = temporalMatch.Value;
+                temporalCoord = TemporalToCoord(temporalCoordString, evenStarters);
+                sanCoordString = halfmove.Substring(temporalMatch.Index + temporalMatch.Length);
+            }
+            else
+            {
+                temporalCoord = new CoordFive(0, 0, -1, 0);
+            }
+
+            //the rest is the san Coord.
+            Match SANMatch = Regex.Match(sanCoordString, "[a-z]\\d+");
+            if (SANMatch.Success)
+            {
+                //this is needed if for example you have something like Ne7e4
+                Match lastSANMatch = Regex.Match(sanCoordString.Substring(SANMatch.Index + 2), "[a-z]\\d+");
+                if (lastSANMatch.Success)
+                {
+                    SANMatch = lastSANMatch;
+                }
+            }
+
+            sanCoordString = SANMatch.Value;
+            CoordFive sanCoord = SANToCoord(sanCoordString);
+
+            return CoordFive.Add(sanCoord, temporalCoord);
+        }
+
+        /// <summary>
+        /// Takes in a temporal coordinate and passes back a CoordFive Temporal coordinate
+        /// For example parses a string "(0T0)", "(-1T12)", etc.
+        /// </summary>
+        /// <param name="temporal"></param>
+        /// <param name="evenStarters"></param>
+        /// <returns></returns>
+        public static CoordFive TemporalToCoord(string temporal, bool evenStarters)
+        {
+            int T = int.Parse(temporal.Substring(temporal.IndexOf('T') + 1, temporal.IndexOf(')') - temporal.IndexOf('T') - 1));
+            int L = ParseLayer(temporal.Substring(1, temporal.IndexOf('T') - 1), evenStarters);
+            return new CoordFive(0, 0, T, L);
+        }
+
+
+        /// <summary>
+        /// This parses my coordinates. for example (w.0T0)
+        /// </summary>
+        /// <param name="temporal"></param>
+        /// <param name="evenstarters"></param>
+        /// <returns></returns>
+        public static CoordFive ParseColoredTemporalCoord(string temporal, bool evenStarters)
+        {
+            int T = int.Parse(temporal.Substring(temporal.IndexOf('T') + 1, temporal.IndexOf(')') - temporal.IndexOf('T') - 1));
+            int L = ParseLayer(temporal.Substring(3, temporal.IndexOf('T') - 3), evenStarters);
+            bool color = false;
+            if (temporal[1] == 'w' || temporal[1] == 'W')
+            {
+                color = true;
+            }
+            return new CoordFive(0, 0, T, L, color);
+        }
+
+        /// <summary>
+        /// Takes in a SAN and passes back a coordfive that is spatial Depending on the SAN passed.
+        /// examples include a4 b3 c20 etc. this only works for files up to the letter z (width of 26 is the max, wont be able to parse aa for example)
+        /// </summary>
+        /// <param name="san">SAN string to parse</param>
+        /// <returns>CoordFive spatial coord. No temporal or color values are set.</returns>
+        public static CoordFive SANToCoord(string san)
+        {
+            char file = san[0];
+            string rank = san.Substring(1);
+            return new CoordFive(file - 'a', int.Parse(rank) - 1, 0, 0);
+        }
+
+        /// <summary>
+        /// Parses a layer string, ie, just a string but with the added bonus that +/-L are taken into account
+        /// as with the other parts of this program, -0 is technically 0L and +0 is 1L
+        /// </summary>
+        /// <param name="layer">Layer string to parse</param>
+        /// <param name="evenStarters">whther +-0exist</param>
+        /// <returns></returns>
+        public static int ParseLayer(string layer, bool evenStarters)
+        {
+            if (!evenStarters)
+            {
+                return int.Parse(layer);
+            }
+            if (layer.Contains("-0"))
+            {
+                return 0;
+            }
+            else if (layer.Contains("+0"))
+            {
+                return 1;
+            }
+            int layerint = int.Parse(layer);
+            if (layerint >= 1)
+            {
+                layerint++;
+            }
+            return layerint;
+        }
+
+        /// <summary>
+        /// Parses a raw string ie. 0,0,0,0. (0T1)e4 would be 4,3,1,0
+        /// this function was no longer in use after moving to SAN
+        /// </summary>
+        /// <param name="coord">string to parse</param>
+        /// <returns>coordfive of string, minus the color</returns>
+        public static CoordFive ParseRawCoordinate(string coord)
+        {
+            coord = coord.Substring(1, coord.Length - 2);
+            string[] coords = coord.Split(',');
+            int x = int.Parse(coords[0]);
+            int y = int.Parse(coords[1]);
+            int t = int.Parse(coords[2]);
+            int l = int.Parse(coords[3]);
+            return new CoordFive(x, y, t, l);
+        }
+
+        /// <summary>
+        /// Takes a coordinate move and turns it into a move object.
+        /// </summary>
+        /// <param name="move">Coordinate move string</param>
+        /// <returns>Move representing the string</returns>
+        public static Move ParseRawCoordinateMove(string move)
+        {
+            CoordFive c1 = ParseRawCoordinate(move.Substring(0, move.IndexOf(')') + 1));
+            CoordFive c2 = ParseRawCoordinate(move.Substring(move.IndexOf(')') + 1));
+            return new Move(c1, c2);
+        }
+
+        /// <summary>
+        /// Takes 2 coordinate strings and turns it into a move. Does not include Color information.
+        /// </summary>
+        /// <param name="coord1">Coordinate move origin String</param>
+        /// <param name="coord2">Coordinate move Destination String</param>
+        /// <returns>Move representing the string</returns>
+        public static Move ParseRawCoordinateMove(string coord1, string coord2)
+        {
+            CoordFive c1 = ParseRawCoordinate(coord1);
+            CoordFive c2 = ParseRawCoordinate(coord2);
+            return new Move(c1, c2);
+        }
+
+        public static CoordFive ParseRawSHADSquare(string coord, bool evenStarters)
+        {
+            CoordFive temporal = ParseColoredTemporalCoord(coord.Substring(0, coord.IndexOf(')') + 1), evenStarters);
+            CoordFive san = SANToCoord(coord.Substring(coord.IndexOf(')') + 1));
+            temporal.Add(san);
+            return temporal;
+        }
+
+        public static Move ParseRawSHADMove(string coord, bool evenStarters)
+        {
+            CoordFive temporal1 = ParseColoredTemporalCoord(coord.Substring(0, coord.IndexOf(')') + 1), evenStarters);
+            CoordFive temporal2 = TemporalToCoord(coord.Substring(coord.LastIndexOf('('), coord.LastIndexOf(')') - coord.LastIndexOf('(') + 1), evenStarters);
+            CoordFive c1 = SANToCoord(coord.Substring(coord.IndexOf(')') + 1, 2));
+            CoordFive c2 = SANToCoord(coord.Substring(coord.Length - 2)); // TODO this wont work for things like c24 ( boards with > 9 squares tall)
+            c1.Add(temporal1);
+            c2.Add(temporal2);
+            c1.Color = temporal1.Color;
+            c2.Color = temporal1.Color;
+            return new Move(c1, c2);
+        }
+
+        public static void ParseHighlights(string highlightsString, GameStateManager gsm)
+        {
+            AnnotatedTurn at = gsm.Index.AT;
+            string[] highlights = highlightsString.Split(' ');
+            for (int i = 1; i < highlights.Length - 1; i++)
+            {
+                string highlight = highlights[i];
+                CoordFive coord = ParseRawSHADSquare(highlight.Substring(1), gsm.EvenStart);
+                int color = 0;
+                switch (highlight[0])
+                {
+                    case 'R':
+                        color = (int)AnnotatedTurn.AnnotationColors.RED;
+                        break;
+
+                    case 'B':
+                        color = (int)AnnotatedTurn.AnnotationColors.BLUE;
+                        break;
+
+                    case 'G':
+                        color = (int)AnnotatedTurn.AnnotationColors.GREEN;
+                        break;
+                }
+                at.HighlightColors.Add(color);
+                at.Highlights.Add(coord);
+            }
+        }
+
+        public static void ParseArrows(string arrowString, GameStateManager gsm)
+        {
+            AnnotatedTurn at = gsm.Index.AT;
+            string[] arrows = arrowString.Split(' ');
+            for (int i = 1; i < arrows.Length - 1; i++)
+            {
+                string arrow = arrows[i];
+                Move m = ParseRawSHADMove(arrow.Substring(1), gsm.EvenStart);
+                int color = 0;
+                switch (arrow[0])
+                {
+                    case 'R':
+                        color = (int)AnnotatedTurn.AnnotationColors.RED;
+                        break;
+
+                    case 'B':
+                        color = (int)AnnotatedTurn.AnnotationColors.BLUE;
+                        break;
+
+                    case 'G':
+                        color = (int)AnnotatedTurn.AnnotationColors.GREEN;
+                        break;
+                }
+                at.ArrowColors.Add(color);
+                at.Arrows.Add(m);
+            }
+        }
+
+        public static void TokenizeSideline(TreeNode<string> stringParent, TreeNode<TokenType> tokenParent, string comment)
+        {
+            string[] regexs =
+            {
+                "^/",
+                "^\\d+[WwBb]?\\.",
+                "^\\([+\\-]?\\d+T-?\\d+\\)" + PieceDesignatorPattern + "[a-z]?\\d{0,2}[a-z]\\d{1,2}(>+)?x?\\([+\\-]?\\d+T-?\\d+\\)\\S+(=[NBRQSKCYUDPW])?",
+                "^\\([+\\-]?\\d+T-?\\d+\\)" + PieceDesignatorPattern + "[a-z]?\\d{0,2}x?[a-z]\\d{1,2}(=[NBRQSKCYUDPW])?",
+                "^" + PieceDesignatorPattern + "[a-z]?\\d{0,2}x?[a-z]\\d{1,2}(=[NBRQSKCYUDPW])?",//TODO rework this. SAN Token
+                "^(\\([+\\-]?\\d+T-?\\d+\\))?0000",
+                "^(\\([+\\-]?\\d+T-?\\d+\\))?O-O-O",
+                "^(\\([+\\-]?\\d+T-?\\d+\\))?O-O",
+                "^\\(~T[+\\-]?(\\d+)\\)",
+                "^\\(>L([+\\-]?\\d+)\\)"
+            };
+            TokenType[] regextokens =
+            {
+                TokenType.TURNTERMINATOR,
+                TokenType.TURNINDICATOR,
+                TokenType.FULLCOORDINATE,
+                TokenType.HALFCOORDINATE,
+                TokenType.SAN,
+                TokenType.NULLMOVE,
+                TokenType.CASTLE,
+                TokenType.LONGCASTLE,
+                TokenType.PRESENTSHIFTED,
+                TokenType.LAYERCREATED,
+            };
+            TreeNode<string> tokenTreeString = new TreeNode<string>("");
+            TreeNode<TokenType> tokenTree = new TreeNode<TokenType>(TokenType.SIDELINE);
+            TreeNode<string> tokenStringIndex = tokenTreeString;
+            TreeNode<TokenType> tokenTreeIndex = tokenTree;
+            int strIndex = 1;//Dont include the first {, otherwise its recursive infinitely.
+            while (strIndex < comment.Length)
+            {
+                if (comment[strIndex] == '{')
+                {
+                    int nesting = 1;
+                    string subcomment = "";
+                    while (nesting > 0)
+                    {
+                        subcomment += comment[strIndex];
+                        strIndex++;
+                        if (strIndex >= comment.Length)
+                        {
+                            throw new Exception("Invalid File. Comment does not contain } to end it" + comment);
+                        }
+                        if (comment[strIndex] == '{')
+                        {
+                            nesting++;
+                        }
+                        if (comment[strIndex] == '}')
+                        {
+                            nesting--;
+                        }
+                    }
+                    subcomment += comment[strIndex];
+                    strIndex++;
+                    if (subcomment.Substring(0, 6).Equals("{[%cal"))
+                    {
+                        tokenStringIndex = tokenStringIndex.AddChild(subcomment);
+                        tokenTreeIndex = tokenTreeIndex.AddChild(TokenType.ARROWS);
+                    }
+                    else if (subcomment.Substring(0, 6).Equals("{[%csl"))
+                    {
+                        tokenStringIndex = tokenStringIndex.AddChild(subcomment);
+                        tokenTreeIndex = tokenTreeIndex.AddChild(TokenType.HIGHLIGHTS);
+                    }
+                    else if (subcomment.Substring(0, 3).Equals("{%c"))
+                    {
+                        tokenStringIndex = tokenStringIndex.AddChild(subcomment);
+                        tokenTreeIndex = tokenTreeIndex.AddChild(TokenType.DESCRIPTION);
+                    }
+                    else
+                    {
+                        TreeNode<string> turnStringParent = tokenStringIndex;
+                        TreeNode<TokenType> turnParent = tokenTreeIndex;
+                        while (turnParent.value != TokenType.TURNTERMINATOR && turnParent.value != TokenType.TURNINDICATOR)
+                        {
+                            turnStringParent = turnStringParent.Parent;
+                            turnParent = turnParent.Parent;
+                        }
+                        TokenizeSideline(turnStringParent, turnParent, subcomment);
+                    }
+                }
+                for (int i = 0; i <= regexs.Length; i++)
+                {
+                    if (i == regexs.Length)
+                    {
+                        strIndex++;
+                        break;
+                    }
+                    Match m = Regex.Match(comment.Substring(strIndex), regexs[i]);
+                    if (!m.Success) continue;
+                    tokenStringIndex = tokenStringIndex.AddChild(m.Value);
+                    tokenTreeIndex = tokenTreeIndex.AddChild(regextokens[i]);
+                    strIndex += m.Length;
+                    break;
+                }
+            }
+            tokenParent.Children.Add(tokenTree);
+            stringParent.Children.Add(tokenTreeString);
+        }
+
+        public static void ParseSideline(TreeNode<string> stringParent, TreeNode<TokenType> tokenParent, GameStateManager gsm)
+        {
+            AnnotationTree.Node startingIndex = gsm.Index;
+            bool evenStarters = gsm.EvenStart;
+            //Parse the tokens.
+            List<Turn> compiledTurns = new List<Turn>();
+            List<Move> compiledMoves = new List<Move>();
+            TreeNode<string> tokenStringIndex = stringParent;
+            TreeNode<TokenType> tokenTreeIndex = tokenParent;
+            while (tokenTreeIndex.Children.Count > 0)
+            {
+                tokenTreeIndex = tokenTreeIndex.Children[0];
+                tokenStringIndex = tokenStringIndex.Children[0];
+                for (int i = 0; i < tokenTreeIndex.Children.Count; i++)
+                {
+                    TreeNode<string> childStringIndex = tokenStringIndex.Children[i];
+                    TreeNode<TokenType> childTokenIndex = tokenTreeIndex.Children[i];
+                    string tokenString = childStringIndex.value;
+                    switch (childTokenIndex.value)
+                    {
+                        case TokenType.COMMENT:
+                        case TokenType.PRESENTSHIFTED:
+                        case TokenType.LAYERCREATED:
+                            //eventually use this for analysis, right now throw it away.
+                            break;
+                        case TokenType.TURNINDICATOR:
+                        case TokenType.TURNTERMINATOR:
+                            goto case TokenType.HALFTURNINDICATOR;
+                        case TokenType.HALFTURNINDICATOR:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            break;
+                        case TokenType.FULLCOORDINATE:
+                        case TokenType.HALFCOORDINATE:
+                        case TokenType.SAN:
+                            if (tokenString.Contains('='))
+                            {
+                                Move sanPromotionMove = PromotionStringToMove(gsm, tokenString, evenStarters);
+                                compiledMoves.Add(sanPromotionMove);
+                                break;
+                            }
+                            Move m = GetShadMove(gsm, tokenString, evenStarters);
+                            compiledMoves.Add(m);
+                            break;
+                        case TokenType.NULLMOVE:
+                            Move nullMove = GetNullMove(tokenString, evenStarters);
+                            if (!gsm.Color)
+                            {
+                                nullMove.SwapColor();
+                            }
+                            compiledMoves.Add(nullMove);
+                            break;
+                        case TokenType.PROMOTION:
+                            Move promotionMove = PromotionStringToMove(gsm, tokenString, evenStarters);
+                            compiledMoves.Add(promotionMove);
+                            break;
+                        case TokenType.CASTLE:
+                        case TokenType.LONGCASTLE:
+                            Move castleMove = FindCastleMove(gsm, tokenString, evenStarters);
+                            compiledMoves.Add(castleMove);
+                            break;
+                        case TokenType.ARROWS:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            ParseArrows(tokenString, gsm);
+                            break;
+                        case TokenType.HIGHLIGHTS:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            ParseHighlights(tokenString, gsm);
+                            break;
+                        case TokenType.DESCRIPTION:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            gsm.Index.AT.Annotation = tokenString.Substring(3, tokenString.Length - 4);
+                            break;
+                        case TokenType.SIDELINE:
+                            if (compiledMoves.Count > 0)
+                            {
+                                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                                compiledMoves.Clear();
+                                bool turnStatus = gsm.MakeTurn(compiledTurns[compiledTurns.Count - 1]);//List.Last() doesn't work on godot.
+                                if (!turnStatus)
+                                {
+                                    throw new Exception("Turn not properly added to gamestate.");
+                                }
+                            }
+                            //Rewind to the previous move to add a sideline.
+                            gsm.RewindToParent(gsm.Index.Parent!);
+                            ParseSideline(childStringIndex, childTokenIndex, gsm);
+                            //go to the mainline after this.
+                            gsm.ProgressTree(0);
+                            break;
+                        case TokenType.UNKNOWN:
+                            throw new Exception("Unknown token detected");
+                    }
+                }
+            }
+            //Add Final Move if needed.
+            if (compiledMoves.Count > 0)
+            {
+                compiledTurns.Add(new Turn(compiledMoves.ToArray()));
+                compiledMoves.Clear();
+                bool turnStatus = gsm.MakeTurn(compiledTurns[compiledTurns.Count - 1]);
+                if (!turnStatus)
+                {
+                    throw new Exception("Turn not properly added to gamestate.");
+                }
+            }
+            gsm.RewindToParent(startingIndex);
+            //rewind to starting index
+
+        }
+    }
+}

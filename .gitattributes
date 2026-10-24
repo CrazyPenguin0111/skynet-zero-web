@@ -1,0 +1,6 @@
+* text=auto
+*.bin binary
+engine/Vendor/** linguist-vendored
+engine/Model/*.json linguist-generated
+engine/wwwroot/pieces/** linguist-vendored
+engine/wwwroot/licenses/** linguist-vendored

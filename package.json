@@ -1,0 +1,1 @@
+{"name":"skynet-zero-web","private":true,"type":"module","scripts":{"test:wasm":"node tools/wasm-smoke.mjs"}}

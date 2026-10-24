@@ -1,0 +1,60 @@
+name: Test and deploy Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Verify bundled model and source
+        run: python3 tools/verify-bundle.py
+      - name: Test engine, model parity, notation and Razor rendering
+        run: dotnet run --project tests/EngineTests.csproj -c Release
+      - name: Publish static WebAssembly app
+        run: dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
+      - name: Run the published WebAssembly engine
+        run: node tools/wasm-smoke.mjs
+      - name: Test the shipped worker and cancellation
+        run: node tools/worker-smoke.mjs
+      - name: Configure Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+      - name: Upload static site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: artifacts/publish/wwwroot
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
