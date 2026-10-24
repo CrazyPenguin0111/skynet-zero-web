@@ -1,11 +1,19 @@
 // The only JS responsibilities are worker transport and browser capabilities.
 window.skynet=(()=>{
- let worker,keyboard,keyUp,wheel,blur,visibility,frame=0,lastFrame=0,vx=0,vy=0,zoomAnchor;
+ let worker,keyboard,keyUp,wheel,blur,visibility,pointerDown,pointerMove,pointerUp,contextMenu,drag,dragFrame=0,frame=0,lastFrame=0,vx=0,vy=0,zoomAnchor;
  let wheelFrame=0,wheelDelta=0,wheelPoint,zoomBusy=false,serial=0;
  const held=new Set(),pending=new Map();
+ const direction=key=>({arrowup:'w',arrowleft:'a',arrowdown:'s',arrowright:'d'}[key]||key);
  const editable=target=>target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"]');
  const blocked=()=>document.hidden||document.querySelector('[role="dialog"]')||editable(document.activeElement);
  const stopPan=()=>{held.clear();cancelAnimationFrame(frame);frame=0;lastFrame=0;vx=vy=0;};
+ const drawDrag=()=>{dragFrame=0;if(!drag)return;drag.viewport.scrollTo({left:drag.left,top:drag.top,behavior:'instant'});};
+ const stopDrag=()=>{
+  cancelAnimationFrame(dragFrame);dragFrame=0;if(!drag)return;
+  drawDrag();drag.viewport.classList.remove('dragging');
+  if(drag.viewport.hasPointerCapture?.(drag.id))drag.viewport.releasePointerCapture(drag.id);
+  drag=null;
+ };
  const panFrame=now=>{
   frame=0;if(blocked()){stopPan();return;}
   const viewport=document.querySelector('.multiverse-viewport');if(!viewport){stopPan();return;}
@@ -29,14 +37,20 @@ window.skynet=(()=>{
    this.unbindKeyboard();
    keyboard=e=>{
     if(e.defaultPrevented||e.ctrlKey||e.metaKey||e.altKey||e.isComposing)return;
-    if(editable(e.target)||blocked())return;
-    if(!['w','a','s','d','f','escape','arrowleft','arrowright'].includes(e.key.toLowerCase()))return;
+    const raw=e.key.toLowerCase();
+    // Escape closes the app's current dialog, while text editing and all
+    // modified browser shortcuts retain their normal behavior.
+    if(raw!=='escape'&&(editable(e.target)||blocked()))return;
+    if(!['w','a','s','d','f','enter','z','backspace','q','e','t','y','u','i','r','tab','escape','arrowup','arrowdown','arrowleft','arrowright'].includes(raw))return;
+    // Tab still traverses menus and controls. On the board/background it
+    // cycles playable boards, as in the Steam game.
+    if(raw==='tab'&&(e.shiftKey||(e.target?.closest?.('button,a,input,select,textarea')&&!e.target.closest('.board'))))return;
     e.preventDefault();
-    const key=e.key.toLowerCase();
+    const key=direction(raw);
     if(['w','a','s','d'].includes(key)){held.add(key);if(!frame)frame=requestAnimationFrame(panFrame);return;}
     dotnet.invokeMethodAsync('OnShortcut',e.key,e.repeat).catch(error=>console.error('Keyboard command failed',error));
    };
-   keyUp=e=>held.delete(e.key.toLowerCase());
+   keyUp=e=>held.delete(direction(e.key.toLowerCase()));
    const zoomFrame=async()=>{
     wheelFrame=0;if(blocked()){wheelDelta=0;return;}
     if(zoomBusy)return;
@@ -55,12 +69,37 @@ window.skynet=(()=>{
     wheelDelta=Math.max(-160,Math.min(160,wheelDelta+amount));
     if(!wheelFrame&&!zoomBusy)wheelFrame=requestAnimationFrame(zoomFrame);
    };
-   blur=()=>{stopPan();cancelAnimationFrame(wheelFrame);wheelFrame=0;wheelDelta=0;};
+   pointerDown=e=>{
+    if(e.button!==0||e.isPrimary===false||document.hidden||document.querySelector('[role="dialog"]')||e.ctrlKey||e.metaKey||e.altKey)return;
+    const viewport=e.target?.closest?.('.multiverse-viewport');
+    if(!viewport||e.target.closest('button,a,input,textarea,select,.board'))return;
+    stopDrag();e.preventDefault();viewport.focus?.({preventScroll:true});drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:viewport.scrollLeft,top:viewport.scrollTop,viewport};
+    viewport.setPointerCapture?.(e.pointerId);viewport.classList.add('dragging');
+   };
+   pointerMove=e=>{
+    if(!drag||e.pointerId!==drag.id)return;
+    if(blocked()){stopDrag();return;}
+    e.preventDefault();
+    // Keep a fractional target so slow pointer motion does not accumulate a
+    // rounding error every frame when the browser rounds scroll positions.
+    drag.left=Math.max(0,Math.min(drag.viewport.scrollWidth-drag.viewport.clientWidth,drag.left+drag.x-e.clientX));
+    drag.top=Math.max(0,Math.min(drag.viewport.scrollHeight-drag.viewport.clientHeight,drag.top+drag.y-e.clientY));
+    drag.x=e.clientX;drag.y=e.clientY;
+    if(!dragFrame)dragFrame=requestAnimationFrame(drawDrag);
+   };
+   pointerUp=e=>{if(drag?.id===e.pointerId)stopDrag();};
+   contextMenu=e=>{if(blocked()||!e.target?.closest?.('.multiverse-viewport'))return;e.preventDefault();dotnet.invokeMethodAsync('OnShortcut','Escape',false).catch(console.error);};
+   blur=()=>{stopPan();stopDrag();cancelAnimationFrame(wheelFrame);wheelFrame=0;wheelDelta=0;};
    visibility=()=>{if(document.hidden)blur();};
    document.addEventListener('keydown',keyboard);
    document.addEventListener('keyup',keyUp);
    document.addEventListener('wheel',wheel,{passive:false});
    document.addEventListener('visibilitychange',visibility);
+   document.addEventListener('pointerdown',pointerDown);
+   document.addEventListener('pointermove',pointerMove,{passive:false});
+   document.addEventListener('pointerup',pointerUp);
+   document.addEventListener('pointercancel',pointerUp);
+   document.addEventListener('contextmenu',contextMenu);
    window.addEventListener('blur',blur);
   },
   unbindKeyboard(){
@@ -69,8 +108,13 @@ window.skynet=(()=>{
    if(wheel)document.removeEventListener('wheel',wheel);
    if(visibility)document.removeEventListener('visibilitychange',visibility);
    if(blur)window.removeEventListener('blur',blur);
-   stopPan();cancelAnimationFrame(wheelFrame);wheelFrame=0;wheelDelta=0;
+   if(pointerDown)document.removeEventListener('pointerdown',pointerDown);
+   if(pointerMove)document.removeEventListener('pointermove',pointerMove);
+   if(pointerUp){document.removeEventListener('pointerup',pointerUp);document.removeEventListener('pointercancel',pointerUp);}
+   if(contextMenu)document.removeEventListener('contextmenu',contextMenu);
+   stopPan();stopDrag();cancelAnimationFrame(wheelFrame);wheelFrame=0;wheelDelta=0;
    keyboard=keyUp=wheel=blur=visibility=null;zoomAnchor=null;
+   pointerDown=pointerMove=pointerUp=contextMenu=null;
   },
   prepareZoom(x,y){
    const viewport=document.querySelector('.multiverse-viewport'),canvas=document.querySelector('.multiverse-canvas');
@@ -86,7 +130,18 @@ window.skynet=(()=>{
    anchor.viewport.scrollBy({left:rect.left+anchor.worldX*scale-anchor.x,top:rect.top+anchor.worldY*scale-anchor.y,behavior:'instant'});
   },
   pan(x,y){document.querySelector('.multiverse-viewport')?.scrollBy({left:x,top:y,behavior:'instant'});},
+  chartIndex(clientX,turns){
+   const chart=document.querySelector('.evaluation-chart');if(!chart)return 0;
+   const bounds=chart.getBoundingClientRect(),x=(clientX-bounds.left)/bounds.width*300;
+   return Math.max(0,Math.min(turns,Math.round((x-10)/280*turns)));
+  },
   focusPresent(){const p=document.querySelector('.board.present');if(p)p.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});},
+  cycleBoards(){
+   const boards=[...document.querySelectorAll('.board.playable')];if(!boards.length)return;
+   const active=boards.findIndex(board=>board.dataset.focused==='true');
+   for(const board of boards)delete board.dataset.focused;
+   const next=boards[(active+1)%boards.length];next.dataset.focused='true';next.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
+  },
   scrollToEnd(){const list=document.querySelector('.moves-list');if(list)list.scrollTop=list.scrollHeight;}
  };
 })();

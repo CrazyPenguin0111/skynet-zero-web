@@ -4,7 +4,7 @@
     <input id="@Id" type="range" min="@Minimum" max="100" step="1" value="@Value" @oninput="Change" disabled="@Disabled"
            aria-valuetext="Level @Value of 100" aria-describedby="@(Id+"-hint")"/>
     <div class="strength-scale" aria-hidden="true"><span>@(Minimum>1?$"Minimum {Minimum}":"Casual")</span><span>Maximum</span></div>
-    <small id="@(Id+"-hint")">@((Strength.FromLevel(Value).Milliseconds/1000d).ToString("0.0",CultureInfo.InvariantCulture)) second @(PerPosition?"budget per position":"search budget")</small>
+    <small id="@(Id+"-hint")">@((Strength.FromLevel(Value).Milliseconds/1000d).ToString("0.0",CultureInfo.InvariantCulture)) second search budget@(PerPosition?" · up to two searches per turn":"")</small>
 </div>
 @code {
     [Parameter,EditorRequired] public string Id {get;set;}="strength";

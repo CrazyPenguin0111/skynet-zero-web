@@ -5,12 +5,12 @@
 Play and analyze 5D chess in a timeline workspace inspired by **5D Chess With Multiverse Time Travel**. The interface, rules, search, model inference and game notation are written in C#. GitHub Pages serves static files; the engine runs on the player's computer as .NET WebAssembly in a dedicated worker. No inference server, account, API key or local engine installation is required.
 
 - Play White, Black or a random side, with a 1–100 strength slider.
-- Move across boards and through time, undo pending moves, then submit a complete multiverse turn with **F**. Hold **WASD** for smooth motion in any direction, including diagonals. Scroll to zoom at the pointer; Shift + scroll pans. Shortcuts pause in dialogs and text fields.
+- Move across boards and through time, undo pending moves with **Z/Backspace**, then submit a complete multiverse turn with **F/Enter**. Hold **WASD/arrow keys** or drag the background for smooth motion in any direction. **Q/E** or scroll zooms at the pointer; Shift + scroll pans. **Tab** cycles playable boards, **U** flips perspective, **T/Y** toggle history/parallel views, **I** toggles travel animation, and **R** opens a restart prompt. Right-click/Escape deselects. Shortcuts pause in dialogs and text fields.
 - Play on a full-window checkered canvas with cream/tan boards, broad purple timeline arrows and a wide side-colored present band passing behind the present boards. Moves, engine settings and analysis use a collapsible panel. Follow persistent white/black piece-travel arrows and labeled branch connectors. Branch origins are reconstructed from played or imported moves; timelines supplied only as an initial custom setup have no recorded parent.
-- Click the red **!** in check or checkmate to advance the present boards by one half-turn and reveal red attack arrows. This is a preview; Escape or Return to position restores the actual game.
+- Click the red **!** at the corner of the board produced by the checking move to advance the present boards by one half-turn and reveal red attack arrows. This is a preview; Escape or Return to position restores the actual game.
 - Import a 5DPGN file or paste a game, including explicit custom starting boards.
 - Export completed games and unfinished turns as 5DPGN.
-- Review played or imported games with an evaluation graph, per-turn centipawn loss, White/Black ACPL and proven mate-in-N scores.
+- Review played or imported games with a clickable evaluation graph, vertical advantage bar, move badges, per-turn centipawn loss, White/Black ACPL and proven mate-in-N scores. Play another move after rewinding to create an analysis variation. The line selector preserves the original and every variation for the current session; export saves the selected line as 5DPGN.
 - Stop a search without losing the game. The last game is saved in local browser storage.
 
 ## C# engine and model
@@ -38,7 +38,7 @@ Engine play now uses the supplied SkynetZero opening books before searching. The
 
 `OpeningRepertoire.cs` follows native `KnowledgeBooks.TryChoose`: full historical-state keys, variant separation, source weights with duplicate prefixes counted once, side-specific recommendations and strict royal-safety/turn-completion checks. Documented alternatives are sampled by their source weights. Pending turns, checks, branched games and positions outside the repertoire fall back to the normal search. No unapproved learned discoveries are included. This book is separate from the frozen model weights.
 
-A book move is identified as **Opening book** in the engine panel and has no invented centipawn or mate score. Position/game analysis always searches, including opening positions.
+A book move is identified as **Opening book** in the engine panel and has no invented centipawn or mate score. Played and imported repertoire moves—including **1. Nf3**—receive the **Book** badge. Position/game analysis still searches opening positions.
 
 To rebuild from the original checkout's supplied books, run:
 
@@ -50,9 +50,13 @@ Review changes and deliberately update the bundle checksum afterward. Normal bui
 
 ## Analysis and notation
 
-Positive scores favor White. Engine value units are normalized using the v10 reference active-pawn coefficient: **484.2 engine units = 100 centipawns**. Scores are shown in pawn units (`+1.25`) and move losses in centipawns (`125 cp`). Loss is the deterioration in the mover's evaluation across a **complete multiverse turn**, floored at zero. Values are clipped to ±1,000 cp for loss calculation. ACPL is the arithmetic mean of scored turns for that side.
+Positive scores favor White. Engine value units are normalized using the v10 reference active-pawn coefficient: **484.2 engine units = 100 centipawns**. Scores are shown in pawn units (`+1.25`) and move losses in centipawns (`125 cp`). Loss compares the engine's best and played **complete multiverse turns from the same root and completed search depth**, floored at zero. A searched best turn has zero loss even if the next position's independent search changes its evaluation. Comparing a different played turn may require a second search with the selected budget; incomplete comparisons are unscored. Values are clipped to ±1,000 cp for loss calculation. ACPL is the arithmetic mean of scored turns for that side.
+
+Badges include **Book, Best, Brilliant, Excellent, Good, Inaccuracy, Mistake and Blunder**. Best matches the searched turn or a tied alternative. Brilliant additionally requires a spatial piece sacrifice verified by native static exchange, completed depth 3 on both positions, and a preserved evaluation; temporal and multi-board sacrifices are not guessed. Numerical thresholds are 50 cp for Inaccuracy, 100 cp for Mistake and 300 cp for Blunder. These are SkynetZero classifications, not Chess.com's proprietary algorithm.
 
 The graph shades White's advantage white above zero and Black's advantage black below zero. The whole-game analysis button disappears on completion and returns when the game or analysis strength changes.
+
+History view hides the opposite color's boards. Parallel view also rotates the time/timeline layout to place timelines side by side. These are 2D views; the Steam game's 3D camera is not reproduced. The present band spans the padded scroll space at every zoom, and played travel arrows terminate on the original historical destination square. Separate connectors show the new branch.
 
 Only the native search's proven mate distance produces `M1`, `M2`, etc.; large neural scores and incomplete searches do not. Negative mate scores favor Black. Scores with no completed search depth are unscored and cannot receive a numerical mistake/blunder label. Mate transitions receive labels such as “Missed mate” or “Allows mate” and are excluded from numerical ACPL. Terminal checkmate is shown as “Checkmate”. This offers Lichess-style review, but is not Lichess's calibration, accuracy percentage or move classification algorithm. Shallow search can produce noisy loss estimates; use a higher analysis strength for closer review.
 

@@ -21,7 +21,9 @@ public static partial class EngineBridge
             Evaluation? evaluation=null;
             switch(r.Command) {
                 case "new":session!.New(r.Side,r.Variant);break;
+                case "restart":session!.Restart();break;
                 case "import":var imported=new GameSession(model);imported.Import(r.Pgn??"");session=imported;break;
+                case "fork":var fork=session!.Fork(r.Index);if(r.Move is {} move)fork.Move(move);session=fork;break;
                 case "move":session!.Move(r.Move??"");break;
                 case "undo":session!.Undo();break;
                 case "submit":session!.Submit();break;

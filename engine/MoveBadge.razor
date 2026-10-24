@@ -1,0 +1,10 @@
+<span class="move-badge @Category" title="@Description" aria-label="@Label">
+@if(Category=="book"){<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4 Q6 2 2 4 V16 Q6 14 10 16 Q14 14 18 16 V4 Q14 2 10 4 Z M10 4 V16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>}
+else {@Symbol}
+</span>
+@code {
+ [Parameter]public string Category{get;set;}="unscored";
+ [Parameter]public string Label{get;set;}="Unscored";
+ [Parameter]public string Description{get;set;}="";
+ private string Symbol=>Category switch {"brilliant"=>"!!","best"=>"★","excellent" or "good"=>"✓","inaccuracy"=>"?!","mistake"=>"?","blunder"=>"??",_=>"·"};
+}

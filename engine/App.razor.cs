@@ -12,17 +12,23 @@ public partial class App : IAsyncDisposable
     private Evaluation? _lastSearch;
     private Square? _selected;
     private MoveView[] _promotions=[];
-    private bool _busy,_review,_flipped,_humanWhite=true,_importOpen,_newOpen,_help,_resignOpen,_analyzing,_showChecks,_analysisComplete,_panelOpen,_restoreZoom,_focusAfterRender;
+    private bool _busy,_review,_flipped,_humanWhite=true,_importOpen,_newOpen,_help,_resignOpen,_restartOpen,_analyzing,_showChecks,_analysisComplete,_panelOpen,_restoreZoom,_focusAfterRender,_animateTravel=true;
+    private string _boardView="normal";
     private string? _error,_message,_importError;
     private string _activity="Loading engine",_importText="",_newSide="white",_variant="standard-t0",_livePgn="";
     private int _strength=Strength.Default,_analysisLevel=Strength.Default,_cell=36,_viewIndex,_operation,_analysisDone;
     private readonly Dictionary<int,Evaluation> _evaluations=[];
     private readonly Dictionary<int,TurnAnalysis> _analysis=[];
+    private sealed record AnalysisLine(int Id,string Label,string Pgn,int Viewing,Evaluation[] Evaluations,TurnAnalysis[] Analysis,bool Complete);
+    private readonly List<AnalysisLine> _lines=[];
+    private int _activeLine;
     private bool IsEngineTurn=>_position!=null&&_position.White!=_humanWhite;
     private Evaluation? SelectedEvaluation=>_evaluations.GetValueOrDefault(_viewIndex);
     private MoveView[] LastMoves=>_position is null?[]:_position.PendingCount>0?_position.Pending:_position.Turns.FirstOrDefault(t=>t.Index==_viewIndex)?.Moves??[];
-    private bool DialogOpen=>_importOpen||_newOpen||_help||_resignOpen||_promotions.Length>0;
-    private bool CanSubmitTurn=>!_busy&&!_review&&!_showChecks&&!IsEngineTurn&&_position is {CanSubmit:true,Result:"*"}&&_viewIndex==_position.TurnCount;
+    private bool DialogOpen=>_importOpen||_newOpen||_help||_resignOpen||_restartOpen||_promotions.Length>0;
+    private bool CanEditLive=>_review?_activeLine>0:!IsEngineTurn;
+    private bool CanUndo=>!_busy&&!_showChecks&&CanEditLive&&_position is {PendingCount:>0,Result:"*"}&&_viewIndex==_position.TurnCount;
+    private bool CanSubmitTurn=>!_busy&&!_showChecks&&CanEditLive&&_position is {CanSubmit:true,Result:"*"}&&_viewIndex==_position.TurnCount;
     private string StatusTitle=>_position is null?"Loading":_review?$"Position after turn {_viewIndex}":_viewIndex<_position.TurnCount?"Viewing an earlier turn":_position.Result!="*"?$"Game over · {_position.Result}":_busy?"Thinking":_position.InCheck?$"{(_position.White?"White":"Black")} is in check":IsEngineTurn?"SkynetZero to move":$"You play {(_humanWhite?"White":"Black")}";
     private string StatusDetail=>!_review&&!_busy&&_position is {PendingCount:>0,CanSubmit:false,Result:"*"}?"Move on the remaining active boards.":"";
     private double EvalPercent=>SelectedEvaluation is {} e?e.Mate!=null?e.Winner==true?100:0:50+45*Math.Tanh((e.Centipawns??0)/400d):50;
@@ -42,7 +48,7 @@ public partial class App : IAsyncDisposable
         if(reply.Error!=null)throw new InvalidDataException(reply.Error);return reply;
     }
     private async Task ApplyReply(EngineReply reply,bool save=true) {
-        if(reply.Position is {} p){if(_position?.TurnCount!=p.TurnCount)_analysisComplete=false;_position=p;_viewIndex=p.Viewing;_livePgn=p.Pgn;_selected=null;_showChecks=false;if(AnalysisMinimum>_analysisLevel){_analysisLevel=AnalysisMinimum;_analysisComplete=false;}if(save)await JS.InvokeVoidAsync("skynet.save",p.Pgn);}
+        if(reply.Position is {} p){if(_position?.TurnCount!=p.TurnCount)_analysisComplete=false;_position=p;_viewIndex=p.Viewing;_livePgn=p.Pgn;_selected=null;_showChecks=false;if(AnalysisMinimum>_analysisLevel){_analysisLevel=AnalysisMinimum;_analysisComplete=false;}if(save&&_activeLine==0)await JS.InvokeVoidAsync("skynet.save",p.Pgn);}
     }
     private async Task<EngineReply?> Execute(EngineRequest request,string activity,bool save=true) {
         if(_busy)return null;
@@ -65,19 +71,45 @@ public partial class App : IAsyncDisposable
     }
     private async Task NewGame() {
         if(_busy)return;_newOpen=false;_review=false;_panelOpen=false;_humanWhite=_newSide=="random"?Random.Shared.Next(2)==0:_newSide=="white";_flipped=!_humanWhite;
-        _evaluations.Clear();_analysis.Clear();_message=null;_lastSearch=null;_analysisComplete=false;
+        _lines.Clear();_activeLine=0;_evaluations.Clear();_analysis.Clear();_message=null;_lastSearch=null;_analysisComplete=false;
         var reply=await Execute(new("new",Side:_humanWhite?"white":"black",Variant:_variant),"Starting game");
         if(reply!=null&&!_humanWhite)await EngineMove();
         _focusAfterRender=true;StateHasChanged();
     }
     private async Task SelectSquare(Square square) {
-        if(_busy||_review||_showChecks||_position is null||_position.Result!="*"||IsEngineTurn||_viewIndex!=_position.TurnCount)return;
+        if(_busy||_showChecks||_position is null||_position.Result!="*"||(!_review&&(IsEngineTurn||_viewIndex!=_position.TurnCount)))return;
         if(_selected!=null){var choices=_position.LegalMoves.Where(m=>m.From==_selected&&m.To==square).ToArray();if(choices.Length>1){_promotions=choices;return;}if(choices.Length==1){await MakeMove(choices[0]);return;}}
         _selected=_selected==square?null:_position.LegalMoves.Any(m=>m.From==square)?square:null;
     }
-    private async Task MakeMove(MoveView move){_promotions=[];await Execute(new("move",Move:move.Id),"Checking move");}
-    private async Task Undo()=>await Execute(new("undo"),"Undoing move");
-    private async Task Submit(){if(!CanSubmitTurn)return;var reply=await Execute(new("submit"),"Submitting turn");if(reply!=null&&_position?.Result=="*"&&IsEngineTurn)await EngineMove();}
+    private async Task MakeMove(MoveView move){
+        _promotions=[];
+        if(_review&&(_activeLine==0||_viewIndex<_position!.TurnCount)){
+            SaveAnalysisLine();int index=_viewIndex;
+            var reply=await Execute(new("fork",Move:move.Id,Index:index),"Creating variation",save:false);
+            if(reply is null)return;
+            _activeLine=_lines.Max(line=>line.Id)+1;
+            foreach(int key in _evaluations.Keys.Where(i=>i>=index).ToArray())_evaluations.Remove(key);
+            foreach(int key in _analysis.Keys.Where(i=>i>index).ToArray())_analysis.Remove(key);
+            _analysisComplete=false;_message=null;SaveAnalysisLine();
+        }else await Execute(new("move",Move:move.Id),"Checking move");
+    }
+    private void SaveAnalysisLine(){
+        if(_position is null)return;
+        var saved=new AnalysisLine(_activeLine,_activeLine==0?"Main line":$"Variation {_activeLine}",_livePgn,_viewIndex,_evaluations.Values.ToArray(),_analysis.Values.ToArray(),_analysisComplete);
+        int index=_lines.FindIndex(line=>line.Id==_activeLine);if(index<0)_lines.Add(saved);else _lines[index]=saved;
+    }
+    private async Task SwitchLine(int id){
+        if(_busy||id==_activeLine)return;SaveAnalysisLine();
+        var line=_lines.Single(l=>l.Id==id);
+        var reply=await Execute(new("import",Pgn:line.Pgn),"Loading variation",save:false);if(reply is null)return;
+        _activeLine=id;_evaluations.Clear();foreach(var e in line.Evaluations)_evaluations[e.Index]=e;
+        _analysis.Clear();foreach(var a in line.Analysis)_analysis[a.Index]=a;
+        _analysisComplete=line.Complete;_message=null;
+        if(_position!.PendingCount==0)await Navigate(line.Viewing);
+    }
+    private Task ChangeLine(ChangeEventArgs e)=>int.TryParse(e.Value?.ToString(),out int id)?SwitchLine(id):Task.CompletedTask;
+    private async Task Undo(){if(CanUndo)await Execute(new("undo"),"Undoing move");}
+    private async Task Submit(){if(!CanSubmitTurn)return;var reply=await Execute(new("submit"),"Submitting turn");if(!_review&&reply!=null&&_position?.Result=="*"&&IsEngineTurn)await EngineMove();}
     private async Task EngineMove(){if(_review||_showChecks)return;var reply=await Execute(new("engine",Strength:_strength),"Thinking");if(reply?.Evaluation is {} e)_lastSearch=e;await JS.InvokeVoidAsync("skynet.scrollToEnd");}
     private async Task Resign(){_resignOpen=false;await Execute(new("resign",Side:_humanWhite?"white":"black"),"Ending game");_review=true;}
     private async Task Navigate(int index) {
@@ -85,11 +117,24 @@ public partial class App : IAsyncDisposable
         // Analysis scores describe submitted turn boundaries. Keep pending moves
         // in the live game and show them again when the player returns to Play.
         await Execute(new("view",Index:_review?index:index==_position.TurnCount?-1:index),"Loading position",save:false);
+        _focusAfterRender=true;
+    }
+    private async Task ChartClick(MouseEventArgs e){
+        if(_busy||_position is null)return;
+        int index=await JS.InvokeAsync<int>("skynet.chartIndex",e.ClientX,_position.TurnCount);
+        await Navigate(index);
     }
     private Task GoLive()=>Navigate(_position?.TurnCount??0);
-    private async Task PlayMode(){if(_busy)return;_review=false;_panelOpen=false;await GoLive();}
+    private async Task PlayMode(){if(_busy)return;if(_activeLine!=0)await SwitchLine(0);_review=false;_panelOpen=false;await GoLive();}
     private async Task ReviewMode(){if(!_busy){_review=true;_panelOpen=true;_selected=null;_message=null;await Navigate(_viewIndex);}}
     private Task FocusPresent()=>JS.InvokeVoidAsync("skynet.focusPresent").AsTask();
+    private void ToggleView(string mode){_boardView=_boardView==mode?"normal":mode;_focusAfterRender=true;}
+    private async Task Restart(){
+        if(_busy)return;_restartOpen=false;_review=false;_panelOpen=false;_boardView="normal";
+        _lines.Clear();_activeLine=0;_evaluations.Clear();_analysis.Clear();_analysisComplete=false;_lastSearch=null;
+        var reply=await Execute(new("restart"),"Restarting game");
+        if(reply!=null&&IsEngineTurn)await EngineMove();_focusAfterRender=true;
+    }
     private async Task SetZoom(ChangeEventArgs e){if(int.TryParse(e.Value?.ToString(),out int cell))await ChangeZoom(cell);}
     private async Task ChangeZoom(int cell,double? x=null,double? y=null){
         if(DialogOpen||_position is null)return;
@@ -108,6 +153,7 @@ public partial class App : IAsyncDisposable
         var reply=await Execute(new("import",Pgn:_importText),"Reading 5DPGN");
         if(reply==null){_importError=_error;_error=null;return;}
         _analysisComplete=false;_lastSearch=null;
+        _lines.Clear();_activeLine=0;await JS.InvokeVoidAsync("skynet.save",_livePgn);
         _importOpen=false;_review=true;_panelOpen=true;_evaluations.Clear();_analysis.Clear();_humanWhite=true;_message=null;
         await Navigate(_viewIndex);
         await FocusPresent();
@@ -115,7 +161,7 @@ public partial class App : IAsyncDisposable
     private void RecordEvaluation(Evaluation e) {
         _evaluations[e.Index]=e;
         foreach(int index in new[]{e.Index,e.Index+1})if(index>0&&_evaluations.TryGetValue(index-1,out var before)&&_evaluations.TryGetValue(index,out var after)) {
-            var turn=_position?.Turns.FirstOrDefault(t=>t.Index==index);if(turn!=null)_analysis[index]=TurnAnalysis.Compare(index,turn.White,before,after);
+            var turn=_position?.Turns.FirstOrDefault(t=>t.Index==index);if(turn!=null)_analysis[index]=TurnAnalysis.Compare(index,turn.White,before,after,turn.BookName);
         }
     }
     // Older exports did not record the play budget. Use maximum analysis for
@@ -149,19 +195,29 @@ public partial class App : IAsyncDisposable
     }
     [JSInvokable]
     public async Task OnShortcut(string key,bool repeat) {
+        if(key.Equals("Escape",StringComparison.OrdinalIgnoreCase)){
+            _importOpen=_newOpen=_help=_resignOpen=_restartOpen=false;_promotions=[];_selected=null;_showChecks=false;
+            StateHasChanged();return;
+        }
         if(DialogOpen)return;
         // Panning remains available while the engine is thinking.
         switch(key.ToLowerInvariant()) {
-            case "w":await JS.InvokeVoidAsync("skynet.pan",0,-120);return;
-            case "a":await JS.InvokeVoidAsync("skynet.pan",-120,0);return;
-            case "s":await JS.InvokeVoidAsync("skynet.pan",0,120);return;
-            case "d":await JS.InvokeVoidAsync("skynet.pan",120,0);return;
+            case "w":case "arrowup":await JS.InvokeVoidAsync("skynet.pan",0,-120);return;
+            case "a":case "arrowleft":await JS.InvokeVoidAsync("skynet.pan",-120,0);return;
+            case "s":case "arrowdown":await JS.InvokeVoidAsync("skynet.pan",0,120);return;
+            case "d":case "arrowright":await JS.InvokeVoidAsync("skynet.pan",120,0);return;
+            case "q":await ChangeZoom(_cell-2);return;
+            case "e":await ChangeZoom(_cell+2);return;
+            case "tab":await JS.InvokeVoidAsync("skynet.cycleBoards");return;
+            case "t":if(!repeat)ToggleView("history");StateHasChanged();return;
+            case "y":if(!repeat)ToggleView("parallel");StateHasChanged();return;
+            case "u":if(!repeat)_flipped=!_flipped;StateHasChanged();return;
+            case "i":if(!repeat)_animateTravel=!_animateTravel;StateHasChanged();return;
         }
         if(_busy)return;
-        if(key.Equals("f",StringComparison.OrdinalIgnoreCase)&&!repeat)await Submit();
-        else if(key=="Escape"){_selected=null;_showChecks=false;}
-        else if(key=="ArrowLeft")await Navigate(_viewIndex-1);
-        else if(key=="ArrowRight")await Navigate(_viewIndex+1);
+        if((key.Equals("f",StringComparison.OrdinalIgnoreCase)||key=="Enter")&&!repeat)await Submit();
+        else if((key.Equals("z",StringComparison.OrdinalIgnoreCase)||key=="Backspace")&&!repeat)await Undo();
+        else if(key.Equals("r",StringComparison.OrdinalIgnoreCase)&&!repeat)_restartOpen=true;
         StateHasChanged();
     }
     public async ValueTask DisposeAsync() {

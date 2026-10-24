@@ -24,6 +24,17 @@ public sealed class GameSession
         positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();result="*";liveStatus=null;
         whiteName=side=="black"?"SkynetZero":"You";blackName=side=="black"?"You":"SkynetZero";engineStrength=0;
     }
+    public void Restart(){
+        live=initial.Clone();positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();
+        result="*";liveStatus=null;engineStrength=0;
+    }
+    public GameSession Fork(int index) {
+        if(index<0||index>=positions.Count)throw new InvalidDataException("That analysis position does not exist.");
+        var fork=new GameSession(model){initial=initial.Clone(),live=positions[index].Clone(),whiteName=whiteName,blackName=blackName,engineStrength=engineStrength};
+        fork.positions.Clear();fork.positions.AddRange(positions.Take(index+1).Select(p=>p.Clone()));
+        fork.turns.AddRange(turns.Take(index));fork.branches.AddRange(branches.Where(b=>b.Turn<=index));
+        fork.UpdateStatus();return fork;
+    }
     public static MoveView ViewMove(GameState state,Move move) {
         Square Sq(CoordFive c)=>new(c.X,c.Y,c.T,c.L,c.Color);
         string token=FiveDProtocol.Format(move,state.EvenStart);
@@ -52,7 +63,8 @@ public sealed class GameSession
         if(pending.Count==0||!RoyalLegality.CanSubmit(live))throw new InvalidOperationException("Move on the required boards and resolve every check before submitting.");
         bool white=live.Color;
         if(!live.SubmitMoves())throw new InvalidOperationException("The present has not advanced.");
-        turns.Add(new(turns.Count+1,white,string.Join(' ',pending.Select(m=>m.Notation)),pending.ToArray()));
+        string? book=OpeningRepertoire.Bundled.Value.Match(positions[^1],pending);
+        turns.Add(new(turns.Count+1,white,string.Join(' ',pending.Select(m=>m.Notation)),pending.ToArray(),book));
         positions.Add(live.Clone());pending.Clear();pendingUndo.Clear();liveStatus=null;
         UpdateStatus();
     }
@@ -70,13 +82,13 @@ public sealed class GameSession
         GameState state=current?live:positions[viewing];
         var status=current?UpdateStatus():CheckAndMate.Analyze(state,new(){MaxWork=25000,MaxMilliseconds=80});
         var moves=new List<MoveView>();
-        if(current&&result=="*")foreach(var move in GameLegalActions.Enumerate(state)) {
+        if(!status.IsTerminal&&(!current||result=="*"))foreach(var move in GameLegalActions.Enumerate(state)) {
             if(move==null)continue;var next=state.Clone();
             if(next.MakeMove(move.Clone(),true)&&RoyalLegality.IsLegalAfterMove(state,move,next))moves.Add(ViewMove(state,move));
         }
         return new(BoardViews(state),moves.ToArray(),state.Color,state.Present,current&&pending.Count>0&&RoyalLegality.CanSubmit(state),
             status.InCheck,status.Status.ToString(),status.Reason,status.WinnerWhite,current?pending.Count:0,turns.Count,viewing,
-            turns.ToArray(),current?pending.ToArray():[],Export(),result,whiteName,blackName,state.EvenStart,
+            turns.ToArray(),current?pending.ToArray():[],Export(),current?result:status.IsTerminal?status.WinnerWhite is {} winner?winner?"1-0":"0-1":"1/2-1/2":"*",whiteName,blackName,state.EvenStart,
             branches.Where(b=>current||b.Turn<=viewing).ToArray(),status.InCheck?CheckPreview(state):null,engineStrength);
     }
     private static BoardView[] BoardViews(GameState state) {
@@ -177,7 +189,68 @@ public sealed class GameSession
         if(depth!=0)throw new InvalidDataException("Unclosed 5DPGN comment.");return b.ToString();
     }
     public Evaluation Analyze(int index,int strength) {
-        int i=Math.Clamp(index,0,positions.Count-1);return Search(positions[i],i,strength).Evaluation;
+        int i=Math.Clamp(index,0,positions.Count-1);var search=Search(positions[i],i,strength);
+        if(i>=turns.Count)return search.Evaluation;
+        var turn=turns[i];
+        var best=search.Result?.CompleteTurnMoves.Where(move=>move!=null)
+            .Select(move=>FiveDProtocol.Format(move!,positions[i].EvenStart)).ToArray()??[];
+        bool matches=best.Length>0&&best.SequenceEqual(turn.Moves.Select(move=>move.Id));
+        int sacrifice=SacrificeOffer(positions[i],positions[i+1],turn);
+        var evidence=new PlayedTurnEvidence(matches,sacrifice);
+        if(matches)evidence=evidence with { Loss=0,ComparisonDepth=search.Evaluation.Depth,
+            MateVerdict=search.Evaluation.Mate is not null?search.Evaluation.Winner==turn.White?"Forced mate":"Mate sequence":null };
+        else if(search.Result is {CompletedDepth:>0} found)
+            evidence=ComparePlayed(positions[i],turn,found,strength,sacrifice);
+        return search.Evaluation with { PlayedTurn=evidence };
+    }
+    private PlayedTurnEvidence ComparePlayed(GameState root,TurnView turn,AlphaBetaResult found,int strength,int sacrifice){
+        var unscored=new PlayedTurnEvidence(false,sacrifice);
+        var played=new List<Move?>();var replay=root.Clone();
+        foreach(var view in turn.Moves){var move=FiveDProtocol.ParseMove(replay,view.Id);played.Add(move);
+            if(!replay.MakeMove(move.Clone(),true))throw new InvalidDataException("Review turn failed legal replay.");}
+        if(!RoyalLegality.CanSubmit(replay))return unscored;played.Add(null);
+        var level=Strength.FromLevel(strength);
+        var settings=new AlphaBetaSettings {CompleteTurnDepth=found.CompletedDepth,MaxNodes=level.Nodes,Threads=1,
+            MaxActionsPerTurn=32,TranspositionEntries=4096,QuiescenceTurns=1,UseAspirationWindows=false,UseNullMovePruning=false};
+        using var tables=SacrificeTable.UseSnapshot(evaluationTables);
+        using var travel=SacrificeTable.UseRootTravel(SacrificeTable.CaptureRootTravel(root));
+        var timer=System.Diagnostics.Stopwatch.StartNew();
+        double Evaluate(AlphaBetaLeaf leaf){
+            // Browser workers can be single-threaded: a wall-clock check in the
+            // callback works even when timer callbacks cannot run during search.
+            if(timer.ElapsedMilliseconds>=level.Milliseconds)throw new OperationCanceledException();
+            return model.Evaluate(leaf.State,root.Color);
+        }
+        AlphaBetaResult comparison;
+        try{comparison=CompleteTurnAlphaBetaSearch.CompareForTraining(root,settings,[found.CompleteTurnMoves,played.ToArray()],Evaluate,default);}
+        catch(OperationCanceledException){return unscored;}
+        if(comparison.TrainingDepth<found.CompletedDepth||comparison.TrainingTurns.Length!=2)return unscored;
+        string Key(IEnumerable<Move?> moves)=>string.Join('|',moves.Select(CompleteTurnCandidates.ActionKey));
+        var actual=comparison.TrainingTurns.Single(t=>Key(t.Actions)==Key(played));
+        var best=comparison.TrainingTurns.MaxBy(t=>t.Score)!;
+        bool Mate(ScoredTrainingTurn candidate)=>Math.Abs(candidate.Score)>CompleteTurnAlphaBetaSearch.EvaluationMaximum;
+        if(comparison.TrainingTurns.Any(t=>Mate(t)&&!t.Proven))return unscored;
+        if(Mate(best)||Mate(actual)){
+            string verdict=best.Score>0&&Mate(best)&&(!Mate(actual)||actual.Score<0)?"Missed mate":
+                actual.Score<0&&Mate(actual)&&!Mate(best)?"Allows mate":actual.Score>0?"Forced mate":"Mate sequence";
+            return unscored with { ComparisonDepth=comparison.TrainingDepth,MateVerdict=verdict };
+        }
+        int Cp(int score)=>Math.Clamp((int)Math.Round(score/484.2*100),-1000,1000);
+        return unscored with { Best=actual.Score==best.Score,Loss=Math.Max(0,Cp(best.Score)-Cp(actual.Score)),ComparisonDepth=comparison.TrainingDepth };
+    }
+    // Be conservative: spatial SEE verifies a material offer, with legality
+    // and recaptures accounted for. Temporal sacrifices require a full 5D
+    // exchange proof and are not guessed from duplicated historical material.
+    internal static int SacrificeOffer(GameState before,GameState after,TurnView turn) {
+        if(turn.Moves.Length!=1||before.Multiverse.Count!=1||after.Multiverse.Count!=1)return 0;
+        var move=turn.Moves[0];
+        if(move.Promotion!=0||move.From.L!=move.To.L||move.From.T!=move.To.T||Board.IsRoyalPiece(move.Piece)||Board.GetPieceValue(move.Piece)<3)return 0;
+        var line=after.GetTimeline(move.To.L)!;var board=line.GetPlayableBoard();
+        int landed=board.GetSquare(move.To.X,move.To.Y);
+        if(landed==0||Board.GetColorBool(landed)!=turn.White)return 0;
+        float captured=Board.GetPieceValue(before.GetSquare(new(move.To.X,move.To.Y,move.To.T,move.To.L,move.To.White)));
+        float offer=StaticExchange.Gain(board,move.To.X,move.To.Y,!turn.White)-captured;
+        return float.IsFinite(offer)?Math.Max(0,(int)Math.Round(offer*100)):0;
     }
     public Evaluation Play(int strength) {
         if(pending.Count!=0)throw new InvalidOperationException("Submit your pending turn first.");

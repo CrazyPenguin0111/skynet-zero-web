@@ -24,12 +24,12 @@ internal sealed class OpeningRepertoire
         positions=data.Choices.GroupBy(c=>c.State,StringComparer.Ordinal)
             .ToDictionary(g=>g.Key,g=>g.ToArray(),StringComparer.Ordinal);
     }
-    internal OpeningChoice? TryChoose(GameState state,Random? random=null){
-        if(state.kingWasTaken||state.TurnMoves.Count!=0||state.Multiverse.Count!=1)return null;
+    private OpeningChoice[] LegalChoices(GameState state){
+        if(state.kingWasTaken||state.TurnMoves.Count!=0||state.Multiverse.Count!=1)return [];
         // This is the native durable key: all historical boards, rights, color,
         // en passant and timeline coordinates. A current-board FEN is not enough.
         if(!positions.TryGetValue(SemanticStateHash.Compute(state),out var choices)||
-            MoveGenerator.HasCurrentThreats(state,state.Color))return null;
+            MoveGenerator.HasCurrentThreats(state,state.Color))return [];
         var legal=new List<OpeningChoice>();
         foreach(var choice in choices){
             var move=choice.Action.Move();
@@ -38,7 +38,13 @@ internal sealed class OpeningRepertoire
             if(!next.MakeMove(move,true)||!RoyalLegality.IsLegalAfterMove(state,move,next)||!RoyalLegality.CanSubmit(next))continue;
             if(!legal.Any(c=>c.Action==choice.Action))legal.Add(choice);
         }
-        if(legal.Count==0)return null;
+        return legal.ToArray();
+    }
+    internal string? Match(GameState state,IReadOnlyList<MoveView> moves)=>moves.Count!=1?null:
+        LegalChoices(state).FirstOrDefault(choice=>FiveDProtocol.Format(choice.Action.Move(),state.EvenStart)==moves[0].Id)?.Name;
+    internal OpeningChoice? TryChoose(GameState state,Random? random=null){
+        var legal=LegalChoices(state);
+        if(legal.Length==0)return null;
         if(random is null)return legal.OrderByDescending(c=>c.Weight).ThenBy(c=>c.Id,StringComparer.Ordinal).First();
         double draw=random.NextDouble()*legal.Sum(c=>c.Weight);
         foreach(var choice in legal){draw-=choice.Weight;if(draw<=0)return choice;}

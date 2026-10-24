@@ -22,6 +22,8 @@ internal static class UiChecks
             if(!html.Contains("type=\"range\" min=\"1\" max=\"100\" step=\"1\""))throw new Exception("Missing granular strength slider");
             if(!html.Contains(position.White?"alt=\"White to move\"":"alt=\"Black to move\""))throw new Exception("Wrong turn indicator");
             if(!html.Contains("class=\"eval-area white\"")||!html.Contains("class=\"eval-area black\""))throw new Exception("Evaluation chart must shade each side's advantage");
+            if(html.Contains("move-number")||html.Contains(">TURN</span>"))throw new Exception("PGN viewer must not retain the removed turn column");
+            if(!html.Contains("class=\"eval-track vertical\"")||!html.Contains("role=\"meter\""))throw new Exception("Advantage meter must run vertically beside the sidebar");
         });
         Console.WriteLine("PASS Blazor render: multiverse boards, analysis, mate score and export controls");
     }
@@ -36,6 +38,13 @@ internal static class UiChecks
             var side=white?"white":"black";
             if(!html.Contains($"class=\"played-travel {side}\"")||!html.Contains($"marker-end=\"url(#travel-{side})\"")||!html.Contains("Branched from L 0"))throw new Exception("Lost persistent travel, side color or parent connector");
             if(html.Contains("T@board.Time")||!html.Contains(" T1</span>"))throw new Exception("Turn labels must render their numeric time");
+            var move=position.Turns.SelectMany(turn=>turn.Moves).Last(m=>m.From.L!=m.To.L||m.From.T!=m.To.T);
+            int half=position.Boards.Min(b=>b.Time*2+(b.White?0:1)),layer=position.Boards.Max(b=>b.Layer);
+            double x=80+(move.To.T*2+(move.To.White?0:1)-half)*414+13+move.To.X*36+18;
+            double y=80+(layer-move.To.L)*414+45+(7-move.To.Y)*36+18;
+            var arrow=System.Text.RegularExpressions.Regex.Match(html,$"class=\"played-travel {side}\" d=\"([^\"]+)\"").Groups[1].Value;
+            if(!arrow.EndsWith($" {x},{y}"))throw new Exception("Travel must end on the square in the original timeline, not its successor branch");
+            if(html.IndexOf("class=\"present-line",StringComparison.Ordinal)>html.IndexOf("class=\"multiverse-scale",StringComparison.Ordinal))throw new Exception("Present band must span the scroll space independently of the scaled canvas");
         });
         Console.WriteLine("PASS persistent travel arrows, branch ancestry and numbered board labels");
     }
@@ -45,7 +54,12 @@ internal static class UiChecks
         await using var renderer=new HtmlRenderer(services,services.GetRequiredService<ILoggerFactory>());
         await renderer.Dispatcher.InvokeAsync(async()=> {
             var rendered=await renderer.RenderComponentAsync<App>();
-            if(!rendered.ToHtmlString().Contains("class=\"check-indicator\""))throw new Exception("Missing red check indicator");
+            string initial=rendered.ToHtmlString();
+            var marked=System.Text.RegularExpressions.Regex.Matches(initial,@"<section[^>]*class=""board .*?</section>",System.Text.RegularExpressions.RegexOptions.Singleline)
+                .Select(match=>match.Value).Where(section=>section.Contains("class=\"check-indicator board-check\"")).ToArray();
+            if(marked.Length!=1)throw new Exception("The check indicator must belong to exactly one played board");
+            var move=position.Turns.Last().Moves.Last();int resultingTime=move.From.T+(move.From.White?0:1);
+            if(!marked[0].Contains($"turn {resultingTime}, {(move.From.White?"Black":"White")}"))throw new Exception("Check badge is on the wrong resulting board");
             var app=activator.App!;
             typeof(App).GetMethod("ToggleChecks",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,null);
             typeof(ComponentBase).GetMethod("StateHasChanged",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,null);
@@ -86,6 +100,44 @@ internal static class UiChecks
         }
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier,CancellationToken token,object?[]? args)=>InvokeAsync<TValue>(identifier,args);
     }
+    public static async Task AnalysisVariations(){
+        EngineReply Send(EngineRequest request)=>JsonSerializer.Deserialize<EngineReply>(EngineBridge.Dispatch(JsonSerializer.Serialize(request,EngineBridge.Json)),EngineBridge.Json)!;
+        var original=Send(new("import",Pgn:"[Board \"standard-t0\"]\n1. e4 / e5\n*")).Position!;
+        var start=Send(new("view",Index:0)).Position!;
+        if(start.LegalMoves.Length!=20)throw new Exception("Historical analysis positions must expose legal moves");
+        var failed=Send(new("fork",Index:0,Move:"(0T1)e2e5"));
+        if(failed.Error is null||Send(new("state")).Position!.Pgn!=original.Pgn)throw new Exception("Invalid variation must preserve the original game");
+        var js=new GameJs();var activator=new FixtureActivator(start,null);
+        using var services=new ServiceCollection().AddLogging().AddSingleton<IJSRuntime>(js).AddSingleton<IComponentActivator>(activator).BuildServiceProvider();
+        await using var renderer=new HtmlRenderer(services,services.GetRequiredService<ILoggerFactory>());
+        await renderer.Dispatcher.InvokeAsync(async()=>{
+            var rendered=await renderer.RenderComponentAsync<App>();var app=activator.App!;
+            Task Invoke(string name,params object[] args)=>(Task)typeof(App).GetMethod(name,BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(app,args)!;
+            int Active()=>(int)typeof(App).GetField("_activeLine",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(app)!;
+            var nf3=start.LegalMoves.Single(m=>m.Id=="(0T1)g1f3");
+            await Invoke("SelectSquare",nf3.From);await Invoke("SelectSquare",nf3.To);
+            if(Active()!=1||Send(new("state")).Position!.PendingCount!=1)throw new Exception("Playing from a rewound position must create a variation");
+            await app.OnShortcut("f",false);
+            var variation=Send(new("state")).Position!;
+            if(variation.TurnCount!=1||variation.Turns.Single().BookName is null||js.Commands.Contains("engine"))throw new Exception("Analysis must submit Nf3 as Book without an automatic engine reply");
+            await Invoke("SwitchLine",0);
+            if(Send(new("state")).Position!.Pgn!=original.Pgn)throw new Exception("Returning to main line must restore the original game exactly");
+            await Invoke("SwitchLine",1);
+            if(Send(new("state")).Position!.Pgn!=variation.Pgn)throw new Exception("Switching back must retain the analyzed variation");
+            await Invoke("ChartClick",new MouseEventArgs{ClientX=250});
+            var appPosition=(PositionView)typeof(App).GetField("_position",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(app)!;
+            if(appPosition.Viewing!=0||!js.Calls.Contains("skynet.chartIndex"))throw new Exception("Clicking the evaluation graph must rewind the game");
+            var d4=appPosition.LegalMoves.Single(m=>m.Id=="(0T1)d2d4");
+            await Invoke("SelectSquare",d4.From);await Invoke("SelectSquare",d4.To);await app.OnShortcut("Enter",false);
+            if(Active()!=2||Send(new("state")).Position!.Turns.Single().Moves.Single().Id!="(0T1)d2d4")throw new Exception("Rewinding a variation must preserve it and create a second branch");
+            await Invoke("SwitchLine",1);
+            if(Send(new("state")).Position!.Pgn!=variation.Pgn)throw new Exception("Creating another branch must not overwrite the first variation");
+            typeof(ComponentBase).GetMethod("StateHasChanged",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(app,null);
+            string html=rendered.ToHtmlString();
+            if(!html.Contains("Variation 2")||!html.Contains("move-badge book")||html.Contains("move-number"))throw new Exception("Variation selector and book badge must render without a turn column");
+        });
+        Console.WriteLine("PASS clickable graph, rewound analysis moves, multiple preserved variations, Book labels and main-line restoration");
+    }
     public static async Task Keyboard() {
         EngineReply Send(EngineRequest request)=>JsonSerializer.Deserialize<EngineReply>(EngineBridge.Dispatch(JsonSerializer.Serialize(request,EngineBridge.Json)),EngineBridge.Json)!;
         Send(new("new"));var pending=Send(new("move",Move:"(0T1)e2e4")).Position!;
@@ -110,6 +162,23 @@ internal static class UiChecks
             if(Cell()!=72)throw new Exception("Zoom upper bound");
             for(int i=0;i<15;i++)await app.OnWheelZoom(-4,300,260);
             if(Cell()!=12)throw new Exception("Zoom lower bound");
+            Set("_review",true);await app.OnShortcut("z",false);Set("_review",false);
+            Set("_busy",true);await app.OnShortcut("z",false);Set("_busy",false);
+            await app.OnShortcut("z",true);
+            if(js.Commands.Count!=0)throw new Exception("Undo escaped review, busy or repeat guards");
+            await app.OnShortcut("z",false);
+            if(js.Commands is not ["undo"]||Send(new("state")).Position!.PendingCount!=0)throw new Exception("Z must undo exactly one pending move");
+            Send(new("move",Move:"(0T1)e2e4"));Set("_position",Send(new("state")).Position!);js.Commands.Clear();
+            await app.OnShortcut("Backspace",false);
+            if(js.Commands is not ["undo"])throw new Exception("Backspace must share undo behavior");
+            Send(new("move",Move:"(0T1)e2e4"));Set("_position",Send(new("state")).Position!);js.Commands.Clear();
+            await app.OnShortcut("t",false);
+            if((string)typeof(App).GetField("_boardView",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(app)! != "history")throw new Exception("T must select history view");
+            await app.OnShortcut("y",false);await app.OnShortcut("y",false);
+            if((string)typeof(App).GetField("_boardView",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(app)! != "normal")throw new Exception("Y must toggle parallel view off again");
+            await app.OnShortcut("r",false);
+            if(!(bool)typeof(App).GetField("_restartOpen",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(app)!)throw new Exception("R must open the restart prompt");
+            await app.OnShortcut("Escape",false);
             await app.OnShortcut("F",false);
             if(!js.Commands.SequenceEqual(new[]{"submit","engine"})||Send(new("state")).Position!.TurnCount!=2)throw new Exception("F must submit and play exactly one engine reply");
         });
@@ -122,7 +191,7 @@ internal static class UiChecks
             if(component is App) {
                 App=(App)component;
                 void Set(string field,object value)=>typeof(App).GetField(field,BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(component,value);
-                Set("_position",position);Set("_review",review);Set("_panelOpen",review);Set("_viewIndex",evaluation?.Index??position.Viewing);Set("_strength",1);
+                Set("_position",position);Set("_livePgn",position.Pgn);Set("_review",review);Set("_panelOpen",review);Set("_viewIndex",evaluation?.Index??position.Viewing);Set("_strength",1);
                 var values=(Dictionary<int,Evaluation>)typeof(App).GetField("_evaluations",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(component)!;if(evaluation!=null)values[evaluation.Index]=evaluation;
             }
             return component;
@@ -130,8 +199,10 @@ internal static class UiChecks
     }
     private sealed class GameJs:IJSRuntime {
         public List<string> Commands=[];
+        public List<string> Calls=[];
         public List<(int,int)> Pans=[];
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier,object?[]? args) {
+            Calls.Add(identifier);
             if(identifier=="skynet.pan")Pans.Add(((int)args![0]!, (int)args[1]!));
             if(identifier=="skynet.request") {
                 string request=(string)args![0]!;Commands.Add(JsonSerializer.Deserialize<EngineRequest>(request,EngineBridge.Json)!.Command);

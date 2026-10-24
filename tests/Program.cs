@@ -28,10 +28,21 @@ internal static class Regression
         Send(new("new",Side:"black"));
         var bookMove=Send(new("engine",Strength:100));
         Check(bookMove.Evaluation is {StopReason:"OpeningBook",BookName:not null,Centipawns:null,Mate:null}&&bookMove.Position!.TurnCount==1,"Engine play must use the opening book without inventing a score");
+        Check(bookMove.Position!.Turns.Single().BookName!=null,"Book membership must be attached to the actual played turn");
+        Send(new("import",Pgn:bookMove.Position.Pgn));Check(State().Turns.Single().BookName!=null,"Imported book moves must be identified from their original position");
         var openingAnalysis=Send(new("analyze",Index:0,Strength:1)).Evaluation!;
         Check(openingAnalysis.BookName is null&&openingAnalysis.StopReason!="OpeningBook","Analysis must search even when a position is in the opening book");
         Send(new("new"));Send(new("move",Move:"(0T1)g1f3"));Send(new("submit"));
+        var nf3=State();Check(nf3.Turns.Single().BookName is not null,"1. Nf3 must be a book move");
+        Send(new("import",Pgn:nf3.Pgn));
+        var nf3Before=Send(new("analyze",Index:0,Strength:1)).Evaluation!;
+        var nf3After=Send(new("analyze",Index:1,Strength:1)).Evaluation!;
+        Check(TurnAnalysis.Compare(1,true,nf3Before,nf3After,State().Turns.Single().BookName).Verdict=="Book","Imported Nf3 must remain Book after real analysis");
         Check(Send(new("engine",Strength:100)).Evaluation!.BookName is not null,"Black must reply from the opening book");
+        foreach(string variant in new[]{"standard","standard-t0"}){
+            Send(new("import",Pgn:$"[Board \"{variant}\"]\n1. (0T1)Ng1f3 /\n*"));
+            Check(State().Turns.Single().BookName is not null,"1. Nf3 must be Book in "+variant);
+        }
         var s=Send(new("new")).Position!;Check(s.LegalMoves.Length==20,"Initial position must have 20 legal moves");
         Check(s.CheckPreview is null,"Quiet positions must not expose a check preview");
         Send(new("submit"),error:true);
@@ -87,6 +98,25 @@ internal static class Regression
         Check(TurnAnalysis.Compare(1,true,after,before).Loss==0,"CPL must be nonnegative");
         Check(TurnAnalysis.Compare(1,true,before,mate).Loss==null,"Mate transitions excluded from ACPL");
         Check(TurnAnalysis.Compare(1,true,before,after with{Depth=0,StaticOnly=true,Centipawns=-900}).Loss==null,"An unsearched static score must never produce a blunder label");
+        var equal=before with{Index=1};
+        Check(TurnAnalysis.Compare(1,true,before,equal).Verdict=="Excellent","Zero loss alone does not establish an engine-best move");
+        var best=before with{PlayedTurn=new(true,0)};
+        Check(TurnAnalysis.Compare(1,true,best,equal).Verdict=="Best","Best must match the engine’s searched turn");
+        Check(TurnAnalysis.Compare(1,true,best,equal,"Classical").Verdict=="Book","Known repertoire moves have the Book badge");
+        var sacrifice=best with{Depth=3,PlayedTurn=new(true,200)};
+        Check(TurnAnalysis.Compare(1,true,sacrifice,equal with{Depth=3}).Verdict=="Brilliant","A sound engine-best piece sacrifice qualifies for Brilliant");
+        Check(TurnAnalysis.Compare(1,true,sacrifice,equal).Verdict!="Brilliant","Shallow evidence cannot award Brilliant");
+        Check(TurnAnalysis.Compare(1,true,sacrifice with{PlayedTurn=new(false,200,600,3)},equal with{Depth=3,Centipawns=-500}).Verdict=="Blunder","An unsound sacrifice is a blunder, not Brilliant");
+        Check(TurnAnalysis.Compare(1,true,best,after with{Centipawns=-900}).Loss==0,"A different next-position horizon cannot turn the same searched best move into a blunder");
+        Check(TurnAnalysis.Compare(1,true,before with{PlayedTurn=new(false,0)},after).Verdict=="Unscored","Incomplete root comparisons must not fall back to mismatched horizons");
+        foreach(var (loss,label) in new[]{(50,"Inaccuracy"),(100,"Mistake"),(300,"Blunder")})
+            Check(TurnAnalysis.Compare(1,true,before,equal with{Centipawns=100-loss}).Verdict==label,"Centipawn loss classification: "+label);
+        var offeredBefore=FENParser.ShadSTDGSMFromString("[Board \"custom\"]\n[Size \"8x8\"]\n[7k/6p1/8/7p/8/8/3B4/7K:0:1:w]")!;
+        var offeredMove=FiveDProtocol.ParseMove(offeredBefore,"(0T1)d2h6");
+        var offeredView=GameSession.ViewMove(offeredBefore,offeredMove);var offeredAfter=offeredBefore.Clone();
+        Check(offeredAfter.MakeMove(offeredMove,true)&&offeredAfter.SubmitMoves(),"Sacrifice fixture must be a legal submitted move");
+        Check(GameSession.SacrificeOffer(offeredBefore,offeredAfter,new(1,true,offeredView.Notation,[offeredView]))>100,"Sacrifice detector must verify a real hanging bishop with the native exchange evaluator");
+        Check(GameSession.SacrificeOffer(offeredBefore,offeredAfter,new(1,true,"multi",[offeredView,offeredView]))==0,"Ambiguous multi-board sacrifices cannot earn an invented Brilliant badge");
         UiChecks.Run(State(),mate).GetAwaiter().GetResult();
         UiChecks.AnalysisCompletion(State()).GetAwaiter().GetResult();
         Send(new("import",Pgn:s.Pgn));Check(State().EngineStrength==34,"Imported game must retain engine analysis strength");
@@ -100,6 +130,7 @@ internal static class Regression
         Check(s.InCheck&&s.CheckPreview!.Checks.Any(c=>c.From.L!=c.To.L),"Cross-timeline checks must retain their native coordinates");
         Send(new("import",Pgn:"[Board \"standard-t0\"]\n1. e4 / e5\n2. a3 / (0T2)Nb8>>(0T1)b6\n*"));
         UiChecks.MultiverseHistory(State(),false).GetAwaiter().GetResult();
+        UiChecks.AnalysisVariations().GetAwaiter().GetResult();
         Console.WriteLine($"PASS {checks} assertions and Razor render checks");
     }
 }
