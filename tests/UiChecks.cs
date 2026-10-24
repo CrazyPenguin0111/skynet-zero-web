@@ -39,12 +39,19 @@ internal static class UiChecks
             if(!html.Contains($"class=\"played-travel {side}\"")||!html.Contains($"marker-end=\"url(#travel-{side})\"")||!html.Contains("Branched from L 0"))throw new Exception("Lost persistent travel, side color or parent connector");
             if(html.Contains("T@board.Time")||!html.Contains(" T1</span>"))throw new Exception("Turn labels must render their numeric time");
             var move=position.Turns.SelectMany(turn=>turn.Moves).Last(m=>m.From.L!=m.To.L||m.From.T!=m.To.T);
-            int half=position.Boards.Min(b=>b.Time*2+(b.White?0:1)),layer=position.Boards.Max(b=>b.Layer);
+            int half=position.Boards.Min(b=>b.Time*2+(b.White?0:1)),layer=position.Boards.Min(b=>b.Layer);
             double x=80+(move.To.T*2+(move.To.White?0:1)-half)*414+13+move.To.X*36+18;
-            double y=80+(layer-move.To.L)*414+45+(7-move.To.Y)*36+18;
+            double y=80+(move.To.L-layer)*414+45+(7-move.To.Y)*36+18;
             var arrow=System.Text.RegularExpressions.Regex.Match(html,$"class=\"played-travel {side}\" d=\"([^\"]+)\"").Groups[1].Value;
             if(!arrow.EndsWith($" {x},{y}"))throw new Exception("Travel must end on the square in the original timeline, not its successor branch");
             if(html.IndexOf("class=\"present-line",StringComparison.Ordinal)>html.IndexOf("class=\"multiverse-scale",StringComparison.Ordinal))throw new Exception("Present band must span the scroll space independently of the scaled canvas");
+            var flat=new MultiverseLayout(position.Boards,"normal");
+            foreach(var line in position.Boards.GroupBy(b=>b.Layer)){
+                var last=line.MaxBy(MultiverseLayout.Half)!;
+                var track=System.Text.RegularExpressions.Regex.Match(html,$"class=\"timeline-line\" data-layer=\"{line.Key}\" style=\"left:([\\d.]+)px;top:[\\d.]+px;width:([\\d.]+)px");
+                if(!track.Success||Math.Abs(double.Parse(track.Groups[1].Value)+double.Parse(track.Groups[2].Value)-(flat.Left(MultiverseLayout.Half(last))+last.Width*36+26))>.01)
+                    throw new Exception("Timeline arrow must end beside its own last board");
+            }
             foreach(string mode in new[]{"history","parallel"})
             foreach(bool flipped in new[]{false,true})
             {
@@ -66,7 +73,7 @@ internal static class UiChecks
                 string path=System.Text.RegularExpressions.Regex.Match(iso,$"class=\"played-travel {side}\" d=\"([^\"]+)\"").Groups[1].Value;
                 var end=path.Split(' ').Last().Split(',').Select(s=>double.Parse(s,System.Globalization.CultureInfo.InvariantCulture)).ToArray();
                 if(Math.Abs(end[0]-(left+matrix[0]*sx))>.001||Math.Abs(end[1]-(top+matrix[1]*sx+sy))>.001)throw new Exception(mode+" travel endpoint does not match the projected original square");
-                var geometry=new MultiverseLayout(position.Boards,mode);
+                var geometry=new MultiverseLayout(position.Boards,mode,flipped);
                 foreach(var board in position.Boards)
                 foreach(double bx in new[]{0d,board.Width*36+26d})
                 foreach(double by in new[]{-24d,board.Height*36+86d})
@@ -87,9 +94,9 @@ internal static class UiChecks
             string initial=rendered.ToHtmlString();
             var marked=System.Text.RegularExpressions.Regex.Matches(initial,@"<section[^>]*class=""board .*?</section>",System.Text.RegularExpressions.RegexOptions.Singleline)
                 .Select(match=>match.Value).Where(section=>section.Contains("class=\"check-indicator board-check\"")).ToArray();
-            if(marked.Length!=1)throw new Exception("The check indicator must belong to exactly one played board");
+            if(marked.Length!=1)throw new Exception("The check indicator must belong to the checking knight's board");
             var move=position.Turns.Last().Moves.Last();int resultingTime=move.From.T+(move.From.White?0:1);
-            if(!marked[0].Contains($"turn {resultingTime}, {(move.From.White?"Black":"White")}"))throw new Exception("Check badge is on the wrong resulting board");
+            if(!marked[0].Contains($"turn {resultingTime}, {(move.From.White?"Black":"White")}"))throw new Exception("Check badge is not on the checking knight's board");
             var app=activator.App!;
             typeof(App).GetMethod("ToggleChecks",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,null);
             typeof(ComponentBase).GetMethod("StateHasChanged",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,null);
@@ -100,7 +107,36 @@ internal static class UiChecks
             await app.OnShortcut("Escape",false);
             if(rendered.ToHtmlString().Contains("class=\"check-arrow\""))throw new Exception("Escape must return to the real position");
         });
+        await CheckSourceBoards(position);
         Console.WriteLine("PASS checkmate indicator, advanced preview, red checks and return without mutation");
+    }
+    private static async Task CheckSourceBoards(PositionView original){
+        // A discovered/cross-timeline check must not mark the last move's
+        // board or the attacked king. Two checks from one board share a badge.
+        BoardView Board(int layer,int time,bool white,bool frontier,params (int X,int Y,int Piece)[] pieces){
+            var squares=new int[64];foreach(var p in pieces)squares[p.Y*8+p.X]=p.Piece;
+            return new(layer,time,white,8,8,squares,frontier,true);
+        }
+        var king=Board(0,2,true,true,(7,7,7));
+        var oldRook=Board(1,3,false,false,(0,0,16));
+        var rook=Board(1,4,false,true,(0,0,16),(1,0,15));
+        var knight=Board(2,2,true,true,(1,1,14));
+        var target=new Square(7,7,2,0,false);
+        var fixture=original with{Boards=[king,oldRook,rook,knight],White=true,Present=2,Pending=[],Branches=[],
+            CheckPreview=new([king with{White=false},oldRook,rook,knight with{White=false}],
+                [new(new(0,0,4,1,false),target),new(new(1,0,4,1,false),target),new(new(1,1,2,2,false),target)])};
+        using var services=new ServiceCollection().AddLogging().BuildServiceProvider();
+        await using var renderer=new HtmlRenderer(services,services.GetRequiredService<ILoggerFactory>());
+        await renderer.Dispatcher.InvokeAsync(async()=>{
+            foreach(bool preview in new[]{false,true}){
+                var view=await renderer.RenderComponentAsync<Multiverse>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Position",fixture},{"ShowChecks",preview}}));
+                var marked=System.Text.RegularExpressions.Regex.Matches(view.ToHtmlString(),@"<section[^>]*class=""board .*?</section>",System.Text.RegularExpressions.RegexOptions.Singleline)
+                    .Select(m=>System.Net.WebUtility.HtmlDecode(m.Value)).Where(s=>s.Contains("class=\"check-indicator board-check\"")).ToArray();
+                if(marked.Length!=2||!marked.Any(s=>s.Contains("Timeline L +1, turn 4, Black"))||
+                    !marked.Any(s=>s.Contains($"Timeline L +2, turn 2, {(preview?"Black":"White")}")))
+                    throw new Exception("Only checking-piece boards may have ! markers, before and during preview");
+            }
+        });
     }
     public static async Task AnalysisCompletion(PositionView position) {
         var activator=new FixtureActivator(position,null);

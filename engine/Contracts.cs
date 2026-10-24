@@ -16,7 +16,7 @@ public sealed record Strength(int Level,int Depth,int Nodes,int Milliseconds) {
     public const int Minimum=1,Maximum=100,Default=34;
     // Distinct, smoothly increasing budgets. Maximum allows a minute of search;
     // the previous 15-second maximum often stopped after just two full turns.
-    private static readonly Strength[] Anchors=[new(1,1,96,1000),new(34,2,512,3000),new(67,6,8192,15000),new(100,8,65536,60000)];
+    private static readonly Strength[] Anchors=[new(1,1,96,1000),new(34,2,512,3000),new(67,6,8192,15000),new(100,64,65536,60000)];
     public static Strength FromLevel(int value) {
         int level=Math.Clamp(value,Minimum,Maximum),segment=Math.Min((level-1)/33,2);
         var low=Anchors[segment];var high=Anchors[segment+1];double t=(level-low.Level)/33d;

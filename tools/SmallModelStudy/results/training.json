@@ -1,0 +1,110 @@
+{
+  "Architecture": "107-64-32-1 \u002B frozen linear skip",
+  "Parameters": 9133,
+  "Seed": 20261024,
+  "BestEpoch": 18,
+  "BestValidationMse": 0.09209467233144523,
+  "Seconds": 1.815108,
+  "Metrics": {
+    "test": {
+      "Positions": 446,
+      "MeanAbsoluteCp": 173.73146987266222,
+      "MedianAbsoluteCp": 112.3523222967796,
+      "P95AbsoluteCp": 485.0115482516977
+    },
+    "train": {
+      "Positions": 1299,
+      "MeanAbsoluteCp": 91.236478996031,
+      "MedianAbsoluteCp": 69.95820761545258,
+      "P95AbsoluteCp": 231.80911100211205
+    },
+    "validation": {
+      "Positions": 428,
+      "MeanAbsoluteCp": 218.4021918834167,
+      "MedianAbsoluteCp": 122.4789927561031,
+      "P95AbsoluteCp": 610.8301889693525
+    }
+  },
+  "Log": [
+    {
+      "Epoch": 10,
+      "TrainingMse": 0.009624745781698961,
+      "ValidationMse": 0.09670685925221274
+    },
+    {
+      "Epoch": 20,
+      "TrainingMse": 0.0038858194075890888,
+      "ValidationMse": 0.0946705163448664
+    },
+    {
+      "Epoch": 30,
+      "TrainingMse": 0.0022783152919620335,
+      "ValidationMse": 0.09607370342585035
+    },
+    {
+      "Epoch": 40,
+      "TrainingMse": 0.0015125565573997377,
+      "ValidationMse": 0.09830247312269352
+    },
+    {
+      "Epoch": 50,
+      "TrainingMse": 0.0013518388706861635,
+      "ValidationMse": 0.09973726093636584
+    },
+    {
+      "Epoch": 60,
+      "TrainingMse": 0.0010011195383176062,
+      "ValidationMse": 0.09975373478813167
+    },
+    {
+      "Epoch": 70,
+      "TrainingMse": 0.000734283984311088,
+      "ValidationMse": 0.09870679551158255
+    },
+    {
+      "Epoch": 80,
+      "TrainingMse": 0.0014834013728612552,
+      "ValidationMse": 0.10133320986706604
+    },
+    {
+      "Epoch": 90,
+      "TrainingMse": 0.00046852691757703544,
+      "ValidationMse": 0.09575261098921752
+    },
+    {
+      "Epoch": 100,
+      "TrainingMse": 0.0004931893237903219,
+      "ValidationMse": 0.09495815009926943
+    },
+    {
+      "Epoch": 110,
+      "TrainingMse": 0.0002252692677347764,
+      "ValidationMse": 0.09642142950537945
+    },
+    {
+      "Epoch": 120,
+      "TrainingMse": 0.0002050179665642952,
+      "ValidationMse": 0.09611753083574205
+    },
+    {
+      "Epoch": 130,
+      "TrainingMse": 0.00018469829116433614,
+      "ValidationMse": 0.09628979011320499
+    },
+    {
+      "Epoch": 140,
+      "TrainingMse": 0.00016815826894883536,
+      "ValidationMse": 0.09617615526811178
+    },
+    {
+      "Epoch": 150,
+      "TrainingMse": 0.00015367796707901676,
+      "ValidationMse": 0.09589699393648735
+    },
+    {
+      "Epoch": 160,
+      "TrainingMse": 0.00016188896579725484,
+      "ValidationMse": 0.09573676366333736
+    }
+  ]
+}

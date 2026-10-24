@@ -16,7 +16,7 @@ const viewport={clientWidth:1000,clientHeight:700,scrollWidth:10000,scrollHeight
   getBoundingClientRect(){return {left:0,top:0};}};
 viewport.classList.remove=viewport.classList.delete.bind(viewport.classList);
 const chart={getBoundingClientRect(){return {left:100,width:600};}};
-const boards=[0,1,2].map(index=>({dataset:{},scrollIntoView(){this.visited=(this.visited||0)+1;}}));
+const boards=[0,1,2].map(index=>({dataset:{},getBoundingClientRect(){this.visited=(this.visited||0)+1;return {left:100,top:100,width:300,height:350};}}));
 const canvas={dataset:{zoom:'1'},getBoundingClientRect(){return {left:600-viewport.scrollLeft,top:500-viewport.scrollTop};}};
 globalThis.window={addEventListener:(type,fn)=>windowEvents.set(type,fn),removeEventListener:type=>windowEvents.delete(type)};
 globalThis.document={hidden:false,activeElement:null,

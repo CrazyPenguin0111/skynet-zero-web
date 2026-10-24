@@ -1,0 +1,767 @@
+{
+  "Sources": [
+    {
+      "Game": "PGN_1000.txt",
+      "Sha256": "4990BABD79615331FECA9981B068F3D7EDE6150726A623DB9260F165BF8D15E5",
+      "Split": "test",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_2000.txt",
+      "Sha256": "EFA79189543984E266BFD56AE236C188B816E572CD349BC87FBC84C329D9A9BC",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_3000.txt",
+      "Sha256": "AB27A46736701414C17FF6A4CD23E41EF0ED70A62EA90E79820966E7A965821A",
+      "Split": "train",
+      "Turns": 36
+    },
+    {
+      "Game": "PGN_4000.txt",
+      "Sha256": "6421148BE555FD31C698F04EEB4E70C9BC6CE95A3691989C36F8EBC4C5352E20",
+      "Split": "train",
+      "Turns": 74
+    },
+    {
+      "Game": "PGN_5000.txt",
+      "Sha256": "6D9E9C79DCC497D5693DCBB7F78741003D479590F0AAD038DDF6DBE214D10DAB",
+      "Split": "train",
+      "Turns": 52
+    },
+    {
+      "Game": "PGN_6000.txt",
+      "Sha256": "4DEFD9EAF501AED9C374255D2B142510DC106D7AD0879AF6A51788F36C0397EF",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_7000.txt",
+      "Sha256": "230100EB5B0D92597913BB0639082A19351877DD776C44961E7084A61E5259EB",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_8000.txt",
+      "Sha256": "F088C8512FE11F3AA4D365885739F55CB319F212743CE69B9E15A215D52694A5",
+      "Split": "validation",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_9000.txt",
+      "Sha256": "3F81F59C965CF9605FA3EB0EEC9E35E2A80CE9C549A3F26F184FB84B940E6D71",
+      "Split": "validation",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_10000.txt",
+      "Sha256": "06A03CE3485086C7E2929C7BE7391D5DC55AEE0D1BC2AA46ADA1E99298B6CDED",
+      "Split": "test",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_11000.txt",
+      "Sha256": "B9D8BFFF2F7826E3826A1F8133B8C192023C6D5C67BEB0A215555010048534DD",
+      "Split": "test",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_12000.txt",
+      "Sha256": "DEA05D32D62F8DAD64698DE4FA21D19B6D8A75F4A91647301937E87F764619E2",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_13000.txt",
+      "Sha256": "4A4A94AC6C29357C51EA646943E6163CCCEB90B17325DF369C25DACFFFD04530",
+      "Split": "train",
+      "Turns": 32
+    },
+    {
+      "Game": "PGN_14000.txt",
+      "Sha256": "04FF5DC695A935A836CE6855C3D56C8AAC7F2EBAB5E12B83FD5B1623C6531DE2",
+      "Split": "train",
+      "Turns": 42
+    },
+    {
+      "Game": "PGN_15000.txt",
+      "Sha256": "B6B9D32BDC1C417DB186FFFEA144DD58505924966E80F16ABC2DAE9E3C63A2FE",
+      "Split": "train",
+      "Turns": 26
+    },
+    {
+      "Game": "PGN_16000.txt",
+      "Sha256": "EF4A5AA94DE7BA5A58E659951FD1544E8B19902FA02DDBEA0C9782E702977CFD",
+      "Split": "train",
+      "Turns": 36
+    },
+    {
+      "Game": "PGN_17000.txt",
+      "Sha256": "09223ADE98D5D66F9DA2AD62407B58B7C1EC32DC51071588C665988835450F06",
+      "Split": "train",
+      "Turns": 26
+    },
+    {
+      "Game": "PGN_18000.txt",
+      "Sha256": "830509661FFA1FA1D0B621BFF8142A331D22B027653CED23FC171FD0EC060EC5",
+      "Split": "validation",
+      "Turns": 30
+    },
+    {
+      "Game": "PGN_19000.txt",
+      "Sha256": "702A330933D642D2A93CCE2E713970D36D8B3B6D5603F618F48D287668D4363E",
+      "Split": "validation",
+      "Turns": 30
+    },
+    {
+      "Game": "PGN_20000.txt",
+      "Sha256": "C9CE179EE352E74A23226BBE835AA8943B7A328544C62BB8E9228480F037C7E0",
+      "Split": "test",
+      "Turns": 70
+    },
+    {
+      "Game": "PGN_21000.txt",
+      "Sha256": "45B1D1CBDE72E25092163409D7207C566B3851BBF76F994F7094E9E9308587B6",
+      "Split": "test",
+      "Turns": 52
+    },
+    {
+      "Game": "PGN_22000.txt",
+      "Sha256": "4BB3AA87460F6278EEACEDCA07AE5511DD2FE4436D592DB3FDF8CDC9C6A9B5AB",
+      "Split": "train",
+      "Turns": 46
+    },
+    {
+      "Game": "PGN_23000.txt",
+      "Sha256": "2D8466278AA98CC534A336D81AC30889AB2CF1D67B89EC88B9A4F43614EFE07A",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_24000.txt",
+      "Sha256": "C87116EB86E40329794D92268B556465BB5701649A1AAAA377CB11D812BAAF38",
+      "Split": "train",
+      "Turns": 32
+    },
+    {
+      "Game": "PGN_25000.txt",
+      "Sha256": "4E91596DAF9472A32D8E533D2FC77F0F302A4D0BB24865FD15EB7231BB43B26A",
+      "Split": "train",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_26000.txt",
+      "Sha256": "2516D48D7804FEC4A04FBF41567E39B331A18024DDEA4DFCD5B8460D7E82232F",
+      "Split": "train",
+      "Turns": 56
+    },
+    {
+      "Game": "PGN_27000.txt",
+      "Sha256": "4399FBD11C7C9C2148ACE4E14C547A8988C2A77D80FA6746D4C255FCB5275E3A",
+      "Split": "train",
+      "Turns": 40
+    },
+    {
+      "Game": "PGN_28000.txt",
+      "Sha256": "E8B41E26631762FE359C6BE8714C5A5F7408F583665ED02F6EA55E1C8FA0BAD2",
+      "Split": "validation",
+      "Turns": 20
+    },
+    {
+      "Game": "PGN_29000.txt",
+      "Sha256": "78A10AB59C810B2C8FC419A4E1641020337155CEA95AD524AC79F9B76E66680C",
+      "Split": "validation",
+      "Turns": 72
+    },
+    {
+      "Game": "PGN_30000.txt",
+      "Sha256": "CA33A4894232AE97163199A2ABCA720FB52F5872265977A90B09D4CF6D90F4D8",
+      "Split": "test",
+      "Turns": 72
+    },
+    {
+      "Game": "PGN_31000.txt",
+      "Sha256": "A8C1002F7D29E7881AE144E52474662B338B5CA7B7FBF66DC2E8300810A597F7",
+      "Split": "test",
+      "Turns": 120
+    },
+    {
+      "Game": "PGN_32000.txt",
+      "Sha256": "54BABBD0AEAF99BE29FD1AD38B0E15E6CDFD7B6D00D45617DB2098C0B6B5F150",
+      "Split": "train",
+      "Turns": 82
+    },
+    {
+      "Game": "PGN_33000.txt",
+      "Sha256": "509AFE4BBE4C18EFB4E490AE5CD95D0A47FCDC06AD0C86CB991CC4D359A62916",
+      "Split": "train",
+      "Turns": 32
+    },
+    {
+      "Game": "PGN_34000.txt",
+      "Sha256": "A1CFC1A2FD0F40EEB53CD233974F62D6F150D82A69CD4A7DF7A2EAFF21BB5B16",
+      "Split": "train",
+      "Turns": 32
+    },
+    {
+      "Game": "PGN_35000.txt",
+      "Sha256": "1D22132F3540C32ACC014A7FB8F365E11809D43DD96D496A629B515104683D49",
+      "Split": "train",
+      "Turns": 32
+    },
+    {
+      "Game": "PGN_36000.txt",
+      "Sha256": "F33A95CA09494CA947730FFCEF9D8F3B20B2BAF78D28A551B0DF4EBD377780EC",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_37000.txt",
+      "Sha256": "D5A58540C7397037907FE8EA2FAAF840F6A17DAB41A2C15B8CCFF52D2F26C34E",
+      "Split": "train",
+      "Turns": 30
+    },
+    {
+      "Game": "PGN_38000.txt",
+      "Sha256": "47336153205DB89BC5E917FCB14EBCA4C656C6D86B196AFCFB231A012B31F366",
+      "Split": "validation",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_39000.txt",
+      "Sha256": "333E05B47AE5D172501BBBC01300F03B15BFC7D1E2D4473F06A53703A1D6C0A3",
+      "Split": "validation",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_40000.txt",
+      "Sha256": "37151892E8662E45E9536AC29AB4201F07F7FC86A8F4BECCE040F68544775E65",
+      "Split": "test",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_41000.txt",
+      "Sha256": "C8EE9A3B7747CFA806A28D47DA74E13915254C8B4F42BE4C047D8C0CAFCEEA13",
+      "Split": "test",
+      "Turns": 36
+    },
+    {
+      "Game": "PGN_42000.txt",
+      "Sha256": "335873661FF19586CBF1F092EBD458CE642F1D4B2250AF871D0A050E5480EB15",
+      "Split": "train",
+      "Turns": 76
+    },
+    {
+      "Game": "PGN_43000.txt",
+      "Sha256": "EE278DFEEC6A0784A1AAFCC6B7C1BE79DE5AB7D5606FBC17D8D0FD31129C1653",
+      "Split": "train",
+      "Turns": 46
+    },
+    {
+      "Game": "PGN_44000.txt",
+      "Sha256": "1F5A491B9703267C7F6023B182E74F6DBF2AA84401E21D715AB64F299B2A18AF",
+      "Split": "train",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_45000.txt",
+      "Sha256": "D205BD7F0FB516E40F4FB78332972440A708574B1BC1795CC254FD82C53A8031",
+      "Split": "train",
+      "Turns": 36
+    },
+    {
+      "Game": "PGN_46000.txt",
+      "Sha256": "C1ED05F89F9DAB5E16A7DE45CF848F312637B2DB482BE19A3032BDA70BB8E0AF",
+      "Split": "train",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_47000.txt",
+      "Sha256": "6D641B4310666F2F130C840CD611B75699B3CED787646E9FB24DBC0AA0F846BE",
+      "Split": "train",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_48000.txt",
+      "Sha256": "AA807B6B69C63BB225EF11A701ED1761205B1CCD97854F221E5F83E601EF4307",
+      "Split": "validation",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_49000.txt",
+      "Sha256": "6360FD6F71B44F0386724BCC8E375C689B17E0A5B328DB7F95FDC472E2CB9C5A",
+      "Split": "validation",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_50000.txt",
+      "Sha256": "C711779F62217E65C948BDBF29B5141E1E4B51624F1556AD83FFDA27B2DD6C2E",
+      "Split": "test",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_51000.txt",
+      "Sha256": "967EE245E5AF152AAD824EA35E3DF7A08B8C789FFBE760C610D7B077A79608DC",
+      "Split": "test",
+      "Turns": 40
+    },
+    {
+      "Game": "PGN_52000.txt",
+      "Sha256": "92B862325896C75848231CDA9C70E3AC1BF675098098C35E0BFE4F947FFBDE5C",
+      "Split": "train",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_53000.txt",
+      "Sha256": "1FD1BEE3C024FAC1CD80CB47807270CDC7216FB107AD6B629502CCAE029C4582",
+      "Split": "train",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_54000.txt",
+      "Sha256": "092D8F9C58D0B8516CD5D4DAD63EB7122F1E69CCE00577EA1277EBF15875BF0A",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_55000.txt",
+      "Sha256": "FB3ED32633E8B767520602B25E295A5B1D85B262FB95FF836D5A7BD58B047092",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_56000.txt",
+      "Sha256": "1E54AEE86D8ABC13F2399001B3F95C1B131A89ECA858970EACB56BF4D8F3E2B2",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_57000.txt",
+      "Sha256": "BBC78713627E5708245403E5FBE3166BEF75BB0E816E3251CD09E3BA167403C1",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_58000.txt",
+      "Sha256": "CA8E9FDF2F26208F51DFFE7F315AB784CB62DA30DE7B338AF8B7732D3018E04E",
+      "Split": "validation",
+      "Turns": 30
+    },
+    {
+      "Game": "PGN_59000.txt",
+      "Sha256": "0FE38D8589D07D85C756BFD17BE3D8CB5CB372CFEFC5FE44529D00BEF61A7C1B",
+      "Split": "validation",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_60000.txt",
+      "Sha256": "F6FE90ACE4B2AC791CAC7A199E4DE244E97B153EFE8978595795FD7903DE4753",
+      "Split": "test",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_61000.txt",
+      "Sha256": "B89DF6611A33484382B9512C08752F47D22F0F4446B408EE73E0DAC045F7E8D8",
+      "Split": "test",
+      "Turns": 66
+    },
+    {
+      "Game": "PGN_62000.txt",
+      "Sha256": "2551ED93D5669A0AEF547D7AF22A875F0123E6FC3C3667FED8606157703EAD3B",
+      "Split": "train",
+      "Turns": 54
+    },
+    {
+      "Game": "PGN_63000.txt",
+      "Sha256": "F9BD11BE20D92A07A82BE0E1AD3010D764204099ADAA919D51963372F79929A9",
+      "Split": "train",
+      "Turns": 76
+    },
+    {
+      "Game": "PGN_64000.txt",
+      "Sha256": "7B6A351F9F8D647C5F13CD912433EDE7837CE9BE39742E0EE31909D87B589573",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_65000.txt",
+      "Sha256": "B64423297FD7250C10268A0142E0628C27768D8C376BC1A43F8DA36205EA9E15",
+      "Split": "train",
+      "Turns": 82
+    },
+    {
+      "Game": "PGN_66000.txt",
+      "Sha256": "13F3A10A82210CF26360057D9F80215CAB87F64D94949C5990E2FE49796B2D8B",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_67000.txt",
+      "Sha256": "AC990F0DDF5A1133C63607136403EF55429AD28306A623A917C76EBE95518375",
+      "Split": "train",
+      "Turns": 98
+    },
+    {
+      "Game": "PGN_68000.txt",
+      "Sha256": "3A3D6EDC2FD126ED24EC7A9AB22E7484FE9FD76FC74959CED09A0355A8E38C18",
+      "Split": "validation",
+      "Turns": 52
+    },
+    {
+      "Game": "PGN_69000.txt",
+      "Sha256": "5DFBE9308745FE567F11F46E549358CA930CC9A37F64EF6A35FED4D21BE86851",
+      "Split": "validation",
+      "Turns": 94
+    },
+    {
+      "Game": "PGN_70000.txt",
+      "Sha256": "7FDD54FE90ADF903A680501128F83F323253F659EDEF8398EBA45C19DD9D1708",
+      "Split": "test",
+      "Turns": 36
+    },
+    {
+      "Game": "PGN_71000.txt",
+      "Sha256": "9C628AC2C63EAE130154DC95F4415DE24329AD4A1D71971BAEABB4BA65AAC6E1",
+      "Split": "test",
+      "Turns": 46
+    },
+    {
+      "Game": "PGN_72000.txt",
+      "Sha256": "9D7747C1C9A15F8EECC528DA62A077257C673139B490D63C52DE309A38838637",
+      "Split": "train",
+      "Turns": 42
+    },
+    {
+      "Game": "PGN_73000.txt",
+      "Sha256": "2AD08A6B2B09C1A0A9DB5119054DA5B0AE597C75CCAB9EB4DE4F0C8FDB03338C",
+      "Split": "train",
+      "Turns": 36
+    },
+    {
+      "Game": "PGN_74000.txt",
+      "Sha256": "3461F6E41D77F82419EDC4C175FEF36FDCFA97189992752AE7E9547AE4AAD7A4",
+      "Split": "train",
+      "Turns": 66
+    },
+    {
+      "Game": "PGN_75000.txt",
+      "Sha256": "0D7DB5F430B52B4F889213F4C6291BA10E0B32B6F7970981CBBC0BD151BB460C",
+      "Split": "train",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_76000.txt",
+      "Sha256": "9B6AEF9CBCAC7C03FE2834A7E1B168F7DEEB05EFE2A2D32C70F61171B21CA9C9",
+      "Split": "train",
+      "Turns": 26
+    },
+    {
+      "Game": "PGN_77000.txt",
+      "Sha256": "B706DACE5C57401B0B4768C38EFCF2F0DF376FB8DB62E7AC68765F06D89879D5",
+      "Split": "train",
+      "Turns": 52
+    },
+    {
+      "Game": "PGN_78000.txt",
+      "Sha256": "A4F6596CAB105EFE29A82E62C700FCABF7FBDB139919F3C1505A1CC9C7D7C09C",
+      "Split": "validation",
+      "Turns": 34
+    },
+    {
+      "Game": "PGN_79000.txt",
+      "Sha256": "85BA850D076A9524F79D6DB882C99A9B204CE09D4361B163B4E7830E94A02972",
+      "Split": "validation",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_80000.txt",
+      "Sha256": "34BDC13E4312C7FB5E0E1D79CCEC851385D2EE4FB032FE5D61CD7F1302B823C4",
+      "Split": "test",
+      "Turns": 56
+    },
+    {
+      "Game": "PGN_81000.txt",
+      "Sha256": "D82B86C2075ED6A6D76A26A28848F23EA349A03CC41F04AF745907CCAA75D96B",
+      "Split": "test",
+      "Turns": 34
+    },
+    {
+      "Game": "PGN_82000.txt",
+      "Sha256": "7920E4F2CB844EFC9EB98ED32EB6FE717973FC13C3CAC7C2E690BB7D760F1ECD",
+      "Split": "train",
+      "Turns": 30
+    },
+    {
+      "Game": "PGN_83000.txt",
+      "Sha256": "F2C3F47B8A2CA595ACCC4FB21E7CC56F504C506C919F948B53A2421C7A1238CB",
+      "Split": "train",
+      "Turns": 56
+    },
+    {
+      "Game": "PGN_84000.txt",
+      "Sha256": "46BB4AC7A9CF5D7BD2AE2EAD623725356801BF52BE59A7F17C3841344CE07ED8",
+      "Split": "train",
+      "Turns": 46
+    },
+    {
+      "Game": "PGN_85000.txt",
+      "Sha256": "6AAF9E70AC0DE41F2371E134D96B61C00C3735EF55E264B87E1487131707B117",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_86000.txt",
+      "Sha256": "08429042BC981A5D76D60A691E689B902C68F87D6CDADABFE7531CC5EA80A05A",
+      "Split": "train",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_87000.txt",
+      "Sha256": "2E0DD5A8982E51C4EE88DD39C6C10DBCD19E88D5DBB26D4818ABEBF214BCD66C",
+      "Split": "train",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_88000.txt",
+      "Sha256": "537A4DAFBF783BE88589CFFDF5BBB8AFB019373A4675B4A0CE6AC8B517FBE8DE",
+      "Split": "validation",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_89000.txt",
+      "Sha256": "4AA16D6947FA1EF94E88B6C156D123D2B75B021FDB554E7B3DF5A91CC13A7C32",
+      "Split": "validation",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_90000.txt",
+      "Sha256": "FA096505A572B6CAF1CD2C9D95D82D0DB419AE48D91F63F3039821E1464A0CF2",
+      "Split": "test",
+      "Turns": 76
+    },
+    {
+      "Game": "PGN_91000.txt",
+      "Sha256": "D0DAC7C0895C9E3874AC7D42B3677E11DC4F805EE31AC06E561C2B76F8EE308F",
+      "Split": "test",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_92000.txt",
+      "Sha256": "8B8D6C21113DBDA412E16C742AA31044A73556A7933CBB9BC193A972796B5E06",
+      "Split": "train",
+      "Turns": 104
+    },
+    {
+      "Game": "PGN_93000.txt",
+      "Sha256": "C16738207A9AF1AC55E4A4C00FF716BBE4F3288C451F7A489B3BF0494F28F636",
+      "Split": "train",
+      "Turns": 52
+    },
+    {
+      "Game": "PGN_94000.txt",
+      "Sha256": "4D3D331F188718F1EAA5C55670ABABA1BE6A8C44A899446DA7525690839C4F6C",
+      "Split": "train",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_95000.txt",
+      "Sha256": "F7EBF17EED5C7DFAF6D0100985F7B66FD6E7369F1AEFD5CC0044A859F2017CC8",
+      "Split": "train",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_96000.txt",
+      "Sha256": "21930691BCFCF904E8055A890B6791F4BD043DEBA49F8D4171A23425D06EA6A4",
+      "Split": "train",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_97000.txt",
+      "Sha256": "1C22A54A9D899BBD5B80DCF2910627DFCC619BA5C104E855DC8CEE49991CAFFF",
+      "Split": "train",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_98000.txt",
+      "Sha256": "0465228DCCA52C86C501479582D2B5A6DEF688EF91277EEF220CAC9FC8EA7AB7",
+      "Split": "validation",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_99000.txt",
+      "Sha256": "D92A8D0300635C0A68D4AD13C23527F0C0D0CB7E91B6DDA3D930B6C74EA94074",
+      "Split": "validation",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_100000.txt",
+      "Sha256": "4FE6C996EC4E58E842FD3C5B4BFDFCED249420E546ECD03CFE3947EC16C5EB36",
+      "Split": "test",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_101000.txt",
+      "Sha256": "C9ECC6B0B3508F4F48C2504B3E74CA0D467D7CA3AF6338F23FEBFD58385E06D3",
+      "Split": "test",
+      "Turns": 58
+    },
+    {
+      "Game": "PGN_102000.txt",
+      "Sha256": "CAE6979D01F86C7C5D37D41709525B79D3994F1FE3C0F8259D8A898E2C503D9A",
+      "Split": "train",
+      "Turns": 40
+    },
+    {
+      "Game": "PGN_103000.txt",
+      "Sha256": "6AB9C8B48BD537628FAB5CDA48B29C8F0164BF316A2332286CD211CB3A365C2F",
+      "Split": "train",
+      "Turns": 40
+    },
+    {
+      "Game": "PGN_104000.txt",
+      "Sha256": "55DA2E186345DD9F29640DBF7ADD425D67FFDD0A9C8D540B67A480C29CA05C79",
+      "Split": "train",
+      "Turns": 114
+    },
+    {
+      "Game": "PGN_105000.txt",
+      "Sha256": "FB301FE1BE8F52D5E1362A6FC3604ABECB11DF3C5E6D6F7CA80D4D58993FD51F",
+      "Split": "train",
+      "Turns": 68
+    },
+    {
+      "Game": "PGN_106000.txt",
+      "Sha256": "A010C3B6220D10A9B0D357D7DCE7097F15685E0AE30E6ADE020F4C7FE7E49E2B",
+      "Split": "train",
+      "Turns": 86
+    },
+    {
+      "Game": "PGN_107000.txt",
+      "Sha256": "FED5B29031819DBC196594BAF6513FBE4911AF317085639843EA0740041F0412",
+      "Split": "train",
+      "Turns": 44
+    },
+    {
+      "Game": "PGN_108000.txt",
+      "Sha256": "CB268F596F605101876497DF337CF1120511DF7135D576A578ED2E726FD4C54D",
+      "Split": "validation",
+      "Turns": 112
+    },
+    {
+      "Game": "PGN_109000.txt",
+      "Sha256": "1B3FC33073B9B9F23C769EE6854DC4C8F14C4C2F7933679B9A8FFCC969BC01EE",
+      "Split": "validation",
+      "Turns": 16
+    },
+    {
+      "Game": "PGN_110000.txt",
+      "Sha256": "F7988935E21CFE6158E0D6754A65671AE1F0268115B1251EE7E900EFABDFBFFD",
+      "Split": "test",
+      "Turns": 26
+    },
+    {
+      "Game": "PGN_111000.txt",
+      "Sha256": "92361F3480F64F129B2A7050ECECD88DF80D7BDFAF2182DC068A2DA0C3355F70",
+      "Split": "test",
+      "Turns": 86
+    },
+    {
+      "Game": "PGN_112000.txt",
+      "Sha256": "A928C6355CEEA405EFF3A7BDBEA3FAA87960E8B80CA858DAF7AE54C31F8E75B9",
+      "Split": "train",
+      "Turns": 52
+    },
+    {
+      "Game": "PGN_113000.txt",
+      "Sha256": "BF474668CD55F5F04E061B3841997645732B686589D6A4CEFAAA411D02C2F966",
+      "Split": "train",
+      "Turns": 94
+    },
+    {
+      "Game": "PGN_114000.txt",
+      "Sha256": "F0C354865AD0C4E6D95FD843AD05D64974EEB234FE49ADD33F19E418841B9B5E",
+      "Split": "train",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_115000.txt",
+      "Sha256": "950BCB56C2F5CEDE63013A74FACB5C469B2755E13D0765E4BFD45A2287EE0E7A",
+      "Split": "train",
+      "Turns": 84
+    },
+    {
+      "Game": "PGN_116000.txt",
+      "Sha256": "6F75AC10A3FA4ED5B0CB02180EFE66830B780FBF5AA155BEC76D0C337A239D7B",
+      "Split": "test",
+      "Turns": 84
+    },
+    {
+      "Game": "PGN_117000.txt",
+      "Sha256": "F5F897FE8627EE69A1A2E54AE01CEED9CFD89EBA1D61EFE40C23404E3B28185B",
+      "Split": "train",
+      "Turns": 48
+    },
+    {
+      "Game": "PGN_118000.txt",
+      "Sha256": "71498BF511CDDADAF33651D9198315D64D848E6A440BD66462A6BC87D877CE0E",
+      "Split": "validation",
+      "Turns": 22
+    },
+    {
+      "Game": "PGN_119000.txt",
+      "Sha256": "33F55619C8E0C7EA444AEF2A33CF825E47F36E4983370555BCE91E462B3B1DED",
+      "Split": "validation",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_120000.txt",
+      "Sha256": "C0FC30088992CD6405DB9B877A2FA54002892E38B0E3F62AC4E1683CAD1A4ECC",
+      "Split": "test",
+      "Turns": 34
+    },
+    {
+      "Game": "PGN_121000.txt",
+      "Sha256": "CA67A3227BA6776275EA39C93129D2F60F89912D95A13EE504855C21E0D8C150",
+      "Split": "test",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_122000.txt",
+      "Sha256": "330521A9088D630F0B936F8A41378DDF4EB9582188E2308A75FDC631BD09ED4F",
+      "Split": "train",
+      "Turns": 16
+    },
+    {
+      "Game": "PGN_123000.txt",
+      "Sha256": "FD778ED50524E3DAC4DC883D60D7EDF4183D4A3E88D3C421DE3CDEDB5C1F4F92",
+      "Split": "train",
+      "Turns": 84
+    },
+    {
+      "Game": "PGN_124000.txt",
+      "Sha256": "9636072B5138B6F66F4009A3EE48242DF0D0C5F8C070440DD6720CFF53529CC8",
+      "Split": "train",
+      "Turns": 38
+    },
+    {
+      "Game": "PGN_125000.txt",
+      "Sha256": "F09F0782DF6908EB4C96F82735FA364228FE6E973C65C84E6C657097F8C0BE52",
+      "Split": "train",
+      "Turns": 28
+    },
+    {
+      "Game": "PGN_126000.txt",
+      "Sha256": "89998104642A2C02B522ADDABC872458227BFE4711831F886BD02C2B43B33072",
+      "Split": "train",
+      "Turns": 44
+    }
+  ],
+  "Failures": [],
+  "Counts": {
+    "test": 446,
+    "train": 1299,
+    "validation": 428
+  },
+  "Seconds": 7.1907535
+}

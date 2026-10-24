@@ -14,12 +14,14 @@ public sealed class MultiverseLayout
     private readonly BoardView[] boards;
     private readonly double a, b, c, d, boardA, boardB;
     private readonly double offsetX, offsetY;
+    private readonly bool flipped;
 
     public bool Isometric { get; }
     public int MinHalf { get; }
     public int MaxHalf { get; }
     public int MinLayer { get; }
     public int MaxLayer { get; }
+    public int TopLayer => flipped ? MaxLayer : MinLayer;
     public int BoardWidth { get; }
     public int BoardHeight { get; }
     public int Pitch { get; }
@@ -31,9 +33,10 @@ public sealed class MultiverseLayout
     public string BoardTransform => Matrix(boardA, boardB, 0, 1, 0, 0);
     public string GroundTransform => Matrix(a, b, c, d, offsetX, offsetY);
 
-    public MultiverseLayout(BoardView[] boards, string view)
+    public MultiverseLayout(BoardView[] boards, string view, bool flipped = false)
     {
         this.boards = boards;
+        this.flipped = flipped;
         Isometric = view is "history" or "parallel";
         MinHalf = boards.Min(Half); MaxHalf = boards.Max(Half);
         MinLayer = boards.Min(b => b.Layer); MaxLayer = boards.Max(b => b.Layer);
@@ -77,7 +80,9 @@ public sealed class MultiverseLayout
 
     public static int Half(BoardView board) => board.Time * 2 + (board.White ? 0 : 1);
     public double Left(int half) => 80 + (half - MinHalf) * Pitch;
-    public double Top(int layer) => 80 + (MaxLayer - layer) * Pitch;
+    // Native positive layers belong to White; negative layers belong to Black.
+    // Their screen side follows the pieces' orientation, not the parent layer.
+    public double Top(int layer) => 80 + (flipped ? MaxLayer - layer : layer - MinLayer) * Pitch;
     public double CenterY(int layer) => Top(layer) + 32 + BoardHeight / 2d;
     public Point Ground(double x, double y) => new(a * x + c * y + offsetX, b * x + d * y + offsetY);
 

@@ -7,7 +7,7 @@ Play and analyze 5D chess in a timeline workspace inspired by **5D Chess With Mu
 - Play White, Black or a random side, with a 1–100 strength slider.
 - Move across boards and through time, undo pending moves with **Z/Backspace**, then submit a complete multiverse turn with **F/Enter**. Hold **WASD/arrow keys** or drag the background for smooth motion in any direction. **Q/E** or scroll zooms at the pointer; Shift + scroll pans. **Tab** cycles playable boards, **U** flips perspective, **T/Y** toggle history/parallel views, **I** toggles travel animation, and **R** opens a restart prompt. Right-click/Escape deselects. Shortcuts pause in dialogs and text fields.
 - Play on a full-window checkered canvas with cream/tan boards, broad purple timeline arrows and a wide side-colored present band passing behind the present boards. Moves, engine settings and analysis use a collapsible panel. Follow persistent white/black piece-travel arrows and labeled branch connectors. Branch origins are reconstructed from played or imported moves; timelines supplied only as an initial custom setup have no recorded parent.
-- Click the red **!** at the corner of the board produced by the checking move to advance the present boards by one half-turn and reveal red attack arrows. This is a preview; Escape or Return to position restores the actual game.
+- Red **!** markers appear only on boards containing checking pieces. Click one to advance the present boards by one half-turn and reveal red attack arrows. This is a preview; Escape or Return to position restores the actual game.
 - Import a 5DPGN file or paste a game, including explicit custom starting boards.
 - Export completed games and unfinished turns as 5DPGN.
 - Review played or imported games with a clickable evaluation graph, vertical advantage bar, move badges, per-turn centipawn loss, White/Black ACPL and proven mate-in-N scores. Play another move after rewinding to create an analysis variation. The line selector preserves the original and every variation for the current session; export saves the selected line as 5DPGN.
@@ -28,9 +28,11 @@ Browser adaptations are recorded in [source-manifest.json](engine/source-manifes
 | 1 | 1 | 96 | 1 second |
 | 34 (default) | 2 | 512 | 3 seconds |
 | 67 | 6 | 8,192 | 15 seconds |
-| 100 | 8 | 65,536 | 60 seconds |
+| 100 | 64 | 65,536 | 60 seconds |
 
 Every intermediate level has its own smoothly increasing node and time budgets. Play and analysis each have a slider. Engine games record the highest played strength in a `SkynetStrength` PGN tag; analysis cannot use a weaker budget. Older engine exports without this tag use maximum analysis. The achieved search depth is shown after each engine move. These are search budgets, not Elo ratings or strict wall-clock guarantees. A complex complete-turn generation or legality check can exceed the time budget. **Stop** terminates the worker and restores the game. If no search depth completes, the UI labels the score as a static evaluation and any playable fallback explicitly.
+
+Depth 64 is a ceiling, not a claim of completed search. A [smaller C# evaluator experiment](tools/SmallModelStudy/README.md) reached greater depths on equal time budgets, but its imitation error and game-116k results do not justify replacing the promoted transformer. The candidate, training procedure and measured results are included separately.
 
 ## Opening repertoire
 
@@ -56,7 +58,7 @@ Badges include **Book, Best, Brilliant, Excellent, Good, Inaccuracy, Mistake and
 
 The graph shades White's advantage white above zero and Black's advantage black below zero. The whole-game analysis button disappears on completion and returns when the game or analysis strength changes.
 
-History and Parallel use isometric perspectives: History looks along time, while Parallel looks across timelines. Boards stand above the checkerboard plane, with all positions retained and the opposite side's pieces faded. Board squares, travel and check arrows share a C# projection, so picking squares, flipping boards, panning and pointer-centered zoom work in either view. The present band spans the padded scroll space at every zoom, and played travel arrows terminate on the original historical destination square. Separate connectors show the new branch.
+History and Parallel use isometric perspectives: History looks along time, while Parallel looks across timelines. Boards stand above the checkerboard plane, with all positions retained and the opposite side's pieces faded. Board squares, travel and check arrows share a C# projection, so picking squares, flipping boards, panning and pointer-centered zoom work in either view. Camera margins expand as WASD or background dragging reaches an edge; the scene never scrolls inside a second clipped container. The present band spans the scroll space at every zoom, and played travel arrows terminate on the original historical destination square. Each timeline arrow ends beside its own last board. Separate connectors show the new branch. White-created timelines appear on White's side and Black-created timelines on Black's side, regardless of the destination timeline's owner; flipping the pieces reverses this layout too.
 
 Only the native search's proven mate distance produces `M1`, `M2`, etc.; large neural scores and incomplete searches do not. Negative mate scores favor Black. Scores with no completed search depth are unscored and cannot receive a numerical mistake/blunder label. Mate transitions receive labels such as “Missed mate” or “Allows mate” and are excluded from numerical ACPL. Terminal checkmate is shown as “Checkmate”. This offers Lichess-style review, but is not Lichess's calibration, accuracy percentage or move classification algorithm. Shallow search can produce noisy loss estimates; use a higher analysis strength for closer review.
 

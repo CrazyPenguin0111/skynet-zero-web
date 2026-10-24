@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <UseAppHost>false</UseAppHost>
+    <NoWarn>$(NoWarn);CS0649</NoWarn><InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../engine/Vendor/*.cs;../../engine/Globals.cs;../../engine/PortableModel.cs" />
+    <EmbeddedResource Include="../../engine/Model/weights.json" LogicalName="SkynetZero.Model.json" />
+    <EmbeddedResource Include="../../engine/Resources/fsac_table.bin" LogicalName="SkynetZero.SacrificeTable.bin" />
+    <EmbeddedResource Include="../../engine/Resources/evaluation-tables.bin" LogicalName="SkynetZero.LearnedTables.bin" />
+  </ItemGroup>
+</Project>

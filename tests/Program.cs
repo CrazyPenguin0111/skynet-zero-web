@@ -19,6 +19,7 @@ internal static class Regression
         Check(levels.Zip(levels.Skip(1)).All(p=>p.First.Nodes<p.Second.Nodes&&p.First.Milliseconds<p.Second.Milliseconds&&p.First.Depth<=p.Second.Depth),"Strength budgets must increase monotonically");
         Check(Strength.FromLevel(-1)==levels[0]&&Strength.FromLevel(101)==levels[^1],"Strength range bounds");
         Check(levels[0].Milliseconds==1000&&levels[^1].Milliseconds==60000&&levels[^1].Nodes==65536&&levels[33].Nodes==512,"Strength endpoints and default budget");
+        Check(levels[^1].Depth==64,"Maximum strength must allow iterative deepening to depth 64 within its time/node budget");
         var model=PortableModel.LoadBundled();
         var vectors=JsonSerializer.Deserialize<VectorCase[]>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"parity-vectors.json")))!;
         using(var table=typeof(PortableModel).Assembly.GetManifestResourceStream("SkynetZero.LearnedTables.bin")!)SacrificeTable.ReadLearned(table,true);
@@ -89,6 +90,25 @@ internal static class Regression
         Check(s.CheckPreview is {Checks.Length:>0},"Checkmate must expose the native checking attacks");
         Check(s.EngineStrength==34&&s.Pgn.Contains("[SkynetStrength \"34\"]"),"Export must retain the highest engine strength for review");
         UiChecks.CheckPreview(s).GetAwaiter().GetResult();
+        // Landing on the opponent's timeline must still create a branch on
+        // the mover's side, and undo/export must retain the native layer IDs.
+        foreach(bool white in new[]{true,false}){
+            string empty="7k/8/8/8/8/8/8/7K",queen=$"7k/8/8/8/{(white?'Q':'q')}7/8/8/7K";
+            var setup=new System.Text.StringBuilder($"[Board \"custom\"]\n[Size \"8x8\"]\n[Color \"{(white?"white":"black")}\"]\n");
+            foreach(int layer in new[]{-1,0,1})foreach(var (time,color) in white?new[]{(1,'w'),(1,'b'),(2,'w')}:new[]{(1,'b'),(2,'w'),(2,'b')})
+                setup.AppendLine($"[{(layer==0?queen:empty)}:{layer}:{time}:{color}]");
+            Send(new("import",Pgn:setup.ToString()));var beforeCrossing=State();
+            Send(new("move",Move:$"(0T2)a4>({(white?-1:1)}T1)a4"));var branched=State();
+            var crossBranch=branched.Branches.Single();
+            Check(crossBranch.Layer==(white?2:-2)&&crossBranch.ParentLayer==(white?-1:1),"Cross-side travel must create a branch owned by the mover");
+            foreach(bool flipped in new[]{false,true}){
+                var camera=new MultiverseLayout(branched.Boards,"normal",flipped);
+                Check((camera.Top(crossBranch.Layer)>camera.Top(0))==(white!=flipped),"Branch display must follow the mover's side even across opposing timelines");
+            }
+            Send(new("import",Pgn:branched.Pgn));Check(State().Branches.Single()==crossBranch,"Cross-side branch PGN round trip");
+            Send(new("undo"));Check(State().Boards.Length==beforeCrossing.Boards.Length&&State().Branches.Length==0,"Cross-side branch undo");
+        }
+        Send(new("import",Pgn:s.Pgn));
         var terminal=Send(new("analyze",Index:s.TurnCount,Strength:34)).Evaluation!;Check(terminal.Mate==0&&terminal.Winner==true,"Terminal mate winner");
         Send(new("move",Move:"(0T1)c7c6"),error:true);
         var before=new Evaluation(0,100,null,null,2,20,.1,false,"","CompletedDepth");

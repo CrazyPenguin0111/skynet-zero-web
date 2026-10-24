@@ -115,6 +115,60 @@ for(const [mode,key] of [['history','t'],['parallel','y']]){
 }
 assert.deepEqual(errors,[]);
 console.log('PASS real square selection and undo in both orientations, screen-space drag/WASD, projected check arrows, and normal-view restoration');
+
+// Exercise actual browser scroll boundaries, including the nested scrolling
+// that previously trapped History/Parallel, at both ends of the zoom range.
+await importGame('[Board "standard-t0"]\n*');
+if(await closePanel.isVisible())await closePanel.click();
+for(const [mode,key] of [['normal',null],['history','t'],['parallel','y']]){
+ if(key){await page.keyboard.press(key);await page.locator(`.view-${mode}`).waitFor();}
+ for(const zoom of [12,72]){
+  await setZoom(zoom);await page.waitForTimeout(600);
+  for(const backwards of [true,false]){
+   await page.locator('.multiverse-viewport').evaluate((v,backwards)=>v.scrollTo({left:backwards?0:v.scrollWidth,top:backwards?0:v.scrollHeight,behavior:'instant'}),backwards);
+   const board=page.locator('.board').first(),before=await board.boundingBox();
+   const keys=backwards?['a','w']:['d','s'];
+   for(const k of keys)await page.keyboard.down(k);
+   await page.waitForTimeout(600);for(const k of keys)await page.keyboard.up(k);
+   await page.waitForTimeout(500);
+   const after=await board.boundingBox(),sign=backwards?1:-1;
+   assert(sign*(after.x-before.x)>230&&sign*(after.y-before.y)>230,`${mode} at ${zoom}: camera stopped at an edge`);
+   assert.deepEqual(await page.locator('.multiverse-space').evaluate(s=>[s.scrollLeft,s.scrollTop]),[0,0],'The scene must never scroll independently of the camera');
+  }
+ }
+ await page.locator('.multiverse-viewport').evaluate(v=>v.scrollTo({left:0,top:0,behavior:'instant'}));
+ const board=page.locator('.board').first(),before=await board.boundingBox();
+ await page.mouse.move(60,750);await page.mouse.down();await page.mouse.move(360,550,{steps:24});await page.mouse.up();
+ const after=await board.boundingBox();
+ assert(Math.abs(after.x-before.x-300)<2&&Math.abs(after.y-before.y+200)<2,`${mode}: drag jumped at the camera edge`);
+ assert.equal(await page.evaluate(()=>getSelection().toString()),'','Panning must not select pieces or labels');
+ assert(await page.locator('.piece').evaluateAll(pieces=>pieces.every(p=>getComputedStyle(p).userSelect==='none'&&!p.draggable)),'Pieces must not participate in browser selection or dragging');
+ await page.getByRole('button',{name:'Focus the present',exact:true}).click();
+ await page.waitForFunction(()=>{const r=document.querySelector('.board.present').getBoundingClientRect();return r.left+r.width>0&&r.left<innerWidth&&r.top+r.height>0&&r.top<innerHeight;},{},{timeout:5000});
+ const present=await page.locator('.board.present').first().boundingBox();
+ assert(present.x+present.width>0&&present.x<1440&&present.y+present.height>0&&present.y<960,`${mode}: focus could not return from distant panning`);
+ if(key){await page.keyboard.press(key);await page.locator('.view-normal').waitFor();}
+}
+assert.deepEqual(errors,[]);
+console.log('PASS unbounded camera at minimum/maximum zoom in all views, drag across edges, no browser selection, and focus after distant panning');
+for(const white of [true,false]){
+ let pgn=`[Board "custom"]\n[Size "8x8"]\n[Color "${white?'white':'black'}"]\n`;
+ const empty='7k/8/8/8/8/8/8/7K',queen=`7k/8/8/8/${white?'Q':'q'}7/8/8/7K`;
+ for(const layer of [-1,0,1])for(const [turn,side] of white?[[1,'w'],[1,'b'],[2,'w']]:[[1,'b'],[2,'w'],[2,'b']])pgn+=`[${layer===0?queen:empty}:${layer}:${turn}:${side}]\n`;
+ await importGame(pgn);if(await closePanel.isVisible())await closePanel.click();await setZoom(24);
+ await page.getByRole('gridcell',{name:`a4, ${white?'White':'Black'} queen, timeline 0, T2 ${white?'white':'black'}`,exact:true}).click();
+ await page.getByRole('gridcell',{name:`a4, empty, timeline ${white?-1:1}, T1 ${white?'white':'black'}`,exact:true}).click();
+ const layer=white?2:-2;
+ await page.locator(`.timeline-line[data-layer="${layer}"]`).waitFor();
+ for(const flipped of [false,true]){
+  if(flipped){await page.keyboard.press('u');await page.waitForTimeout(150);}
+  const offset=await page.evaluate(layer=>parseFloat(document.querySelector(`.timeline-line[data-layer="${layer}"]`).style.top)-parseFloat(document.querySelector('.timeline-line[data-layer="0"]').style.top),layer);
+  assert.equal(offset>0,white!==flipped,'New branch must be on the moving color’s side, even after landing on an opposing timeline');
+ }
+ await page.keyboard.press('u');
+}
+assert.deepEqual(errors,[]);
+console.log('PASS White and Black branch placement from opposing timelines, including flipped perspective');
 } catch(error) {
  await page.screenshot({path:join(screenshots,'failure.png')});
  throw error;

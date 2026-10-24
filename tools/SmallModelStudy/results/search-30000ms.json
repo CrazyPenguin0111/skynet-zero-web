@@ -1,0 +1,102 @@
+{
+  "Microbenchmarks": [
+    {
+      "Position": "opening",
+      "Model": "transformer",
+      "EvaluationsPerSecond": 328.7518007082819,
+      "Sink": 0.12990747
+    },
+    {
+      "Position": "opening",
+      "Model": "compact",
+      "EvaluationsPerSecond": 237182.86152226472,
+      "Sink": 1677.1998
+    },
+    {
+      "Position": "game116k-white26",
+      "Model": "transformer",
+      "EvaluationsPerSecond": 318.7367823840555,
+      "Sink": -57.87866
+    },
+    {
+      "Position": "game116k-white26",
+      "Model": "compact",
+      "EvaluationsPerSecond": 772617.5276239115,
+      "Sink": 15455.709
+    }
+  ],
+  "Searches": [
+    {
+      "Position": "opening",
+      "Model": "transformer",
+      "Repeat": 0,
+      "Milliseconds": 30000,
+      "DepthLimit": 64,
+      "CompletedDepth": 6,
+      "Nodes": 13370,
+      "Leaves": 12998,
+      "GenerationWork": 6299297,
+      "Seconds": 30.0051148,
+      "StopReason": "TimeLimit",
+      "EvaluationCalls": 9301,
+      "EvaluationSeconds": 29.3931802000001,
+      "Score": 610,
+      "Mate": null,
+      "Move": "(0T1)e2e4"
+    },
+    {
+      "Position": "opening",
+      "Model": "compact",
+      "Repeat": 0,
+      "Milliseconds": 30000,
+      "DepthLimit": 64,
+      "CompletedDepth": 11,
+      "Nodes": 583592,
+      "Leaves": 565164,
+      "GenerationWork": 372432045,
+      "Seconds": 30.0001226,
+      "StopReason": "TimeLimit",
+      "EvaluationCalls": 510768,
+      "EvaluationSeconds": 5.371287599998194,
+      "Score": 649,
+      "Mate": null,
+      "Move": "(0T1)b1c3"
+    },
+    {
+      "Position": "game116k-white26",
+      "Model": "transformer",
+      "Repeat": 0,
+      "Milliseconds": 30000,
+      "DepthLimit": 64,
+      "CompletedDepth": 4,
+      "Nodes": 17935,
+      "Leaves": 9981,
+      "GenerationWork": 53552184,
+      "Seconds": 30.0025523,
+      "StopReason": "TimeLimit",
+      "EvaluationCalls": 8665,
+      "EvaluationSeconds": 27.43448690000006,
+      "Score": -5760,
+      "Mate": null,
+      "Move": "(1T25)d3(0T25)d2"
+    },
+    {
+      "Position": "game116k-white26",
+      "Model": "compact",
+      "Repeat": 0,
+      "Milliseconds": 30000,
+      "DepthLimit": 64,
+      "CompletedDepth": 6,
+      "Nodes": 183270,
+      "Leaves": 108526,
+      "GenerationWork": 593308138,
+      "Seconds": 30.0002388,
+      "StopReason": "TimeLimit",
+      "EvaluationCalls": 100155,
+      "EvaluationSeconds": 1.3588877000000084,
+      "Score": -4778,
+      "Mate": null,
+      "Move": "(1T25)d3(0T25)d2"
+    }
+  ]
+}

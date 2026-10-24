@@ -22,7 +22,10 @@ public sealed class PortableModel
         ExtendedEvaluationTermsEncoding.Fill(state, perspective, features);
         return Forward(features);
     }
-    public float Forward(float[] input)
+    public float Forward(float[] input) => MathF.Tanh(Math.Clamp(ForwardLogit(input),-20000f/8700f,20000f/8700f));
+    // Unclipped score for distillation diagnostics; normal inference retains
+    // the exact original bounded output above.
+    public float ForwardLogit(float[] input)
     {
         if (input.Length != Terms) throw new ArgumentException("The v10 model requires 107 features.");
         float orientation = input[MultiverseEvaluation.TempoIndex] > 0 ? -1 : 1;
@@ -50,7 +53,7 @@ public sealed class PortableModel
         var ow=W("termOutput.weight");float result=W("termOutput.bias")[0];
         for(int j=0;j<64;j++){float mean=0;for(int t=0;t<Terms;t++)mean+=tokens[t*64+j];result+=mean/Terms*ow[j];}
         for(int t=0;t<Terms;t++)result+=input[t]*orientation*ow[64+t];
-        return MathF.Tanh(Math.Clamp(result*orientation,-20000f/8700f,20000f/8700f));
+        return result*orientation;
     }
     private static float Dot(float[] a,int ai,float[] b,int bi,int length)
     {
