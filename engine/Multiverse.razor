@@ -3,58 +3,64 @@
 {
     const int cell=36;var zoom=Cell/36d;
     var allBoards=ShowChecks&&Position.CheckPreview is {} preview?preview.Boards:Position.Boards;
-    bool compact=ViewMode!="normal",parallel=ViewMode=="parallel";
+    var camera=new MultiverseLayout(allBoards,ViewMode);
     bool perspective=Selected?.White??(ShowChecks?!Position.White:Position.White);
-    var boards=compact?allBoards.Where(b=>b.White==perspective).ToArray():allBoards;
-    var minHalf=allBoards.Min(b=>b.Time*2+(b.White?0:1));
-    var maxHalf=allBoards.Max(b=>b.Time*2+(b.White?0:1));
-    var minLayer=allBoards.Min(b=>b.Layer);var maxLayer=allBoards.Max(b=>b.Layer);
-    var boardWidth=allBoards.Max(b=>b.Width)*cell+26;var boardHeight=allBoards.Max(b=>b.Height)*cell+26;
-    var pitch=Math.Max(boardWidth+100,allBoards.Max(b=>b.Height)*cell+126);var row=pitch;
-    double Column(int half)=>(half-minHalf)/(compact?2d:1d);
-    double Left(int half,int layer)=>80+(parallel?maxLayer-layer:Column(half))*pitch;
-    double Top(int half,int layer)=>80+(parallel?Column(half):maxLayer-layer)*row;
-    var width=Math.Max(800,(parallel?maxLayer-minLayer+1:Column(maxHalf)+1)*pitch+100);
-    var height=Math.Max(460,(parallel?Column(maxHalf)+1:maxLayer-minLayer+1)*row+85);
+    var minHalf=camera.MinHalf;var minLayer=camera.MinLayer;var maxLayer=camera.MaxLayer;
+    var boardWidth=camera.BoardWidth;var boardHeight=camera.BoardHeight;var pitch=camera.Pitch;
+    var width=camera.Width;var height=camera.Height;
     var present=allBoards.Where(b=>b.Frontier&&b.Active).Min(b=>b.Time*2+(b.White?0:1));
     var gridLeft=80-(pitch-boardWidth)/2;
     var travelMoves=TravelArrows().ToArray();
-    double BoardCenterY(int half,int layer)=>Top(half,layer)+32+boardHeight/2d;
-    double X(Square s)=>Left(s.T*2+(s.White?0:1),s.L)+13+(Flipped?allBoards[0].Width-1-s.X:s.X)*cell+cell/2d;
-    double Y(Square s)=>Top(s.T*2+(s.White?0:1),s.L)+45+(Flipped?s.Y:allBoards[0].Height-1-s.Y)*cell+cell/2d;
+    double X(Square s)=>camera.SquareCenter(s,Flipped).X;
+    double Y(Square s)=>camera.SquareCenter(s,Flipped).Y;
     var annotation=AnnotationSquare();
-    <div class="multiverse-space @(AnimateTravel?"animate-travel":"") view-@ViewMode" style="--full-turn:@(pitch*(compact?1:2)*zoom)px;--timeline-row:@(row*zoom)px;--turn-left:@((gridLeft+(minHalf%2!=0&&!compact?pitch:0))*zoom)px;--grid-top:@((BoardCenterY(minHalf,maxLayer)-row/2d)*zoom)px">
+    var presentPoint=camera.Ground(camera.Left(present)+boardWidth/2d,camera.CenterY(maxLayer));
+    var bandPosition=camera.Isometric
+        ?$"left:calc(50vw + {presentPoint.X*zoom}px);top:calc(50vh + {presentPoint.Y*zoom}px);height:{boardWidth*.76*zoom*.8660254}px;--band-angle:{camera.PresentAngle}deg;--scene-height:{height*zoom}px"
+        :$"left:calc(50vw + {presentPoint.X*zoom}px);width:{boardWidth*.76*zoom}px";
+    <div class="multiverse-space @(AnimateTravel?"animate-travel":"") @(camera.Isometric?"isometric":"") view-@ViewMode" style="--full-turn:@(pitch*2*zoom)px;--timeline-row:@(pitch*zoom)px;--turn-left:@((gridLeft+(minHalf%2!=0?pitch:0))*zoom)px;--grid-top:@((camera.CenterY(maxLayer)-pitch/2d)*zoom)px">
+    @if(camera.Isometric)
+    {
+        <svg class="isometric-floor" aria-hidden="true">
+            <defs><pattern id="isometric-checker" patternUnits="userSpaceOnUse" x="@(gridLeft+(minHalf%2!=0?pitch:0))" y="@(camera.CenterY(maxLayer)-pitch/2d)" width="@(pitch*4)" height="@(pitch*2)" patternTransform="@camera.GroundTransformAtZoom(zoom)">
+                <rect width="@(pitch*4)" height="@(pitch*2)" fill="#cbccc5"/>
+                <path d="M 0,0 h @(pitch*2) v @pitch H 0 Z M @(pitch*2),@pitch h @(pitch*2) v @pitch H @(pitch*2) Z" fill="#c1c2bb"/>
+            </pattern></defs>
+            <g class="floor-origin"><rect class="floor-fill" fill="url(#isometric-checker)"/></g>
+        </svg>
+    }
     @* The band belongs to the scroll space, outside the scaled canvas. It
        covers the entire padded view at every zoom without changing its bounds. *@
-    <div class="present-line @(present%2==0?"white":"black") @(parallel?"parallel":"")" aria-label="Present" style="@(parallel?$"top:calc(50vh + {BoardCenterY(present,maxLayer)*zoom}px);height:{boardHeight*.76*zoom}px":$"left:calc(50vw + {(Left(present,maxLayer)+boardWidth/2d)*zoom}px);width:{boardWidth*.76*zoom}px");--band-border:@(4*zoom)px;--band-shadow:@(-9*zoom)px"></div>
+    <div class="present-line @(present%2==0?"white":"black") @(camera.Isometric?"isometric-band":"")" aria-label="Present" style="@bandPosition;--band-border:@(4*zoom)px;--band-shadow:@(-9*zoom)px"></div>
     <div class="multiverse-scale" style="width:@(width*zoom)px;height:@(height*zoom)px">
     <div class="multiverse-canvas" data-zoom="@zoom" style="width:@(width)px;height:@(height)px;--cell:@(cell)px;transform:scale(@zoom)">
+        <div class="timeline-map" style="width:@(camera.FlatWidth)px;height:@(camera.FlatHeight)px;transform:@camera.GroundTransform">
         @for(int layer=maxLayer;layer>=minLayer;layer--)
         {
             var l=layer;var branch=Position.Branches.FirstOrDefault(b=>b.Layer==l);
-            var start=branch is null?12:80+Column(branch.StartTime*2+(branch.StartWhite?0:1))*pitch;
-            <div class="timeline-line @(parallel?"parallel":"")" style="left:@(parallel?Left(minHalf,l)+boardWidth/2d+48:start)px;top:@(parallel?start:BoardCenterY(minHalf,l)-48)px;width:@((parallel?height:width)-start-96)px" aria-hidden="true">@if(branch is null){<span>@LayerLabel(l)</span>}<i></i></div>
+            var start=branch is null?12:camera.Left(branch.StartTime*2+(branch.StartWhite?0:1));
+            <div class="timeline-line" style="left:@(start)px;top:@(camera.CenterY(l)-48)px;width:@(camera.FlatWidth-start-96)px" aria-hidden="true">@if(branch is null){<span>@LayerLabel(l)</span>}<i></i></div>
         }
-        <svg class="branch-connectors" width="@width" height="@height" aria-label="Timeline ancestry">
+        <svg class="branch-connectors" width="@camera.FlatWidth" height="@camera.FlatHeight" aria-label="Timeline ancestry">
         @foreach(var branch in Position.Branches)
         {
             int parentHalf=branch.ParentTime*2+(branch.ParentWhite?0:1),childHalf=branch.StartTime*2+(branch.StartWhite?0:1);
-            var fromX=Left(parentHalf,branch.ParentLayer)+(parallel?boardWidth/2d:boardWidth);
-            var toX=Left(childHalf,branch.Layer)+(parallel?boardWidth/2d:0);
-            var fromY=parallel?Top(parentHalf,branch.ParentLayer)+32+boardHeight:BoardCenterY(parentHalf,branch.ParentLayer);
-            var toY=parallel?Top(childHalf,branch.Layer)+32:BoardCenterY(childHalf,branch.Layer);
-            var midX=(fromX+toX)/2d;var midY=(fromY+toY)/2d;
+            var fromX=camera.Left(parentHalf)+boardWidth;var toX=camera.Left(childHalf);
+            var fromY=camera.CenterY(branch.ParentLayer);var toY=camera.CenterY(branch.Layer);
+            var midX=(fromX+toX)/2d;
             <g><title>@LayerLabel(branch.Layer) branched from @LayerLabel(branch.ParentLayer) at T@(branch.ParentTime), @(branch.ParentWhite?"White":"Black")</title>
-                <path d="@(parallel?$"M {fromX},{fromY} C {fromX},{midY} {toX},{midY} {toX},{toY}":$"M {fromX},{fromY} C {midX},{fromY} {midX},{toY} {toX},{toY}")"/>
+                <path d="M @fromX,@fromY C @midX,@fromY @midX,@toY @toX,@toY"/>
                 <circle cx="@fromX" cy="@fromY" r="12"/>
             </g>
         }
         </svg>
-        @foreach(var board in boards.OrderBy(b=>b.Time).ThenBy(b=>b.White))
+        </div>
+        <div class="board-set">
+        @foreach(var board in allBoards.OrderBy(camera.Depth).ThenBy(b=>b.Time))
         {
-            var half=board.Time*2+(board.White?0:1);var left=Left(half,board.Layer);var top=Top(half,board.Layer);
+            var half=MultiverseLayout.Half(board);var originPoint=camera.BoardOrigin(board);
             var origin=Position.Branches.FirstOrDefault(b=>b.Layer==board.Layer&&b.StartTime==board.Time&&b.StartWhite==board.White);
-            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.White?"white-turn":"black-turn") @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move playable":"") @(board.Frontier&&board.Active&&half==present?"present":"")" style="left:@(left)px;top:@(top)px;width:@(board.Width*cell+26)px" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
+            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.White?"white-turn":"black-turn") @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move playable":"") @(board.Frontier&&board.Active&&half==present?"present":"") @(camera.Isometric&&board.White!=perspective?"other-side":"")" style="left:@(originPoint.X)px;top:@(originPoint.Y)px;width:@(board.Width*cell+26)px;transform:@camera.BoardTransform" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
                 @if(IsCheckBoard(board)){<button class="check-indicator board-check" @onclick="()=>OnCheck.InvokeAsync()" aria-label="@(ShowChecks?"Hide checks":"Show checks")" aria-pressed="@(ShowChecks?"true":"false")" title="@(Position.Status=="Checkmate"?"Checkmate · show checks":"Check · show checks")">!</button>}
                 @if(origin is not null){<div class="branch-source">Branched from @LayerLabel(origin.ParentLayer) · T@(origin.ParentTime) @(origin.ParentWhite?"White":"Black")</div>}
                 <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@(board.Time)</span></header>
@@ -82,6 +88,7 @@
                 <footer><span>@LayerLabel(board.Layer)</span></footer>
             </section>
         }
+        </div>
         @if(travelMoves.Length>0)
         {
             <svg class="travel-overlay" width="@width" height="@height" aria-label="Played time-travel moves"><defs>

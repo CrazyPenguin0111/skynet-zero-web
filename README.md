@@ -56,7 +56,7 @@ Badges include **Book, Best, Brilliant, Excellent, Good, Inaccuracy, Mistake and
 
 The graph shades White's advantage white above zero and Black's advantage black below zero. The whole-game analysis button disappears on completion and returns when the game or analysis strength changes.
 
-History view hides the opposite color's boards. Parallel view also rotates the time/timeline layout to place timelines side by side. These are 2D views; the Steam game's 3D camera is not reproduced. The present band spans the padded scroll space at every zoom, and played travel arrows terminate on the original historical destination square. Separate connectors show the new branch.
+History and Parallel use isometric perspectives: History looks along time, while Parallel looks across timelines. Boards stand above the checkerboard plane, with all positions retained and the opposite side's pieces faded. Board squares, travel and check arrows share a C# projection, so picking squares, flipping boards, panning and pointer-centered zoom work in either view. The present band spans the padded scroll space at every zoom, and played travel arrows terminate on the original historical destination square. Separate connectors show the new branch.
 
 Only the native search's proven mate distance produces `M1`, `M2`, etc.; large neural scores and incomplete searches do not. Negative mate scores favor Black. Scores with no completed search depth are unscored and cannot receive a numerical mistake/blunder label. Mate transitions receive labels such as “Missed mate” or “Allows mate” and are excluded from numerical ACPL. Terminal checkmate is shown as “Checkmate”. This offers Lichess-style review, but is not Lichess's calibration, accuracy percentage or move classification algorithm. Shallow search can produce noisy loss estimates; use a higher analysis strength for closer review.
 
@@ -81,6 +81,8 @@ python3 -m http.server 4183 --directory artifacts/publish/wwwroot
 Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. Game calculation and analysis stay local after assets load. The app has no analytics or game-upload endpoint.
 
 `tests/Program.cs` covers model/feature parity, strict moves, pending undo, time travel, multi-board turns, import/export, promotion restrictions, mate proof and loss orientation. `tests/UiChecks.cs` renders real Razor components. The Node integration tests execute the **published browser WebAssembly**, including opening-book play, the actual worker bridge and cancellation. A controlled-clock DOM fixture checks continuous diagonal panning, display-rate independence, keyboard release/blur/dialog guards and pointer-centered wheel zoom. They do not substitute for an interactive visual browser check.
+
+With Playwright and Chromium installed, serve the published `wwwroot` and run `node tools/isometric-browser.mjs http://127.0.0.1:4183`. This checks both camera angles, all historical boards, move selection and undo, projected travel/check endpoints, flipped boards, pointer-centered zoom, continuous panning and present-band coverage. Screenshots go to the system temporary directory under `skynet-isometric`. `PLAYWRIGHT_MODULE`, `CHROMIUM_PATH` and `SKYNET_SCREENSHOTS` can override the local test installation and output paths.
 
 ## GitHub Pages
 

@@ -45,8 +45,38 @@ internal static class UiChecks
             var arrow=System.Text.RegularExpressions.Regex.Match(html,$"class=\"played-travel {side}\" d=\"([^\"]+)\"").Groups[1].Value;
             if(!arrow.EndsWith($" {x},{y}"))throw new Exception("Travel must end on the square in the original timeline, not its successor branch");
             if(html.IndexOf("class=\"present-line",StringComparison.Ordinal)>html.IndexOf("class=\"multiverse-scale",StringComparison.Ordinal))throw new Exception("Present band must span the scroll space independently of the scaled canvas");
+            foreach(string mode in new[]{"history","parallel"})
+            foreach(bool flipped in new[]{false,true})
+            {
+                var view=await renderer.RenderComponentAsync<Multiverse>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Position",position},{"ViewMode",mode},{"Flipped",flipped}}));
+                string iso=view.ToHtmlString();
+                var sections=System.Text.RegularExpressions.Regex.Matches(iso,@"<section[^>]*class=""board .*?</section>",System.Text.RegularExpressions.RegexOptions.Singleline);
+                if(sections.Count!=position.Boards.Length)throw new Exception(mode+" must retain both colors' historical boards and arrow destinations");
+                if(!iso.Contains("class=\"isometric-floor\"")||!iso.Contains("isometric-band"))throw new Exception(mode+" must project the checkerboard and present band");
+                var target=position.Boards.Single(b=>b.Layer==move.To.L&&b.Time==move.To.T&&b.White==move.To.White);
+                string targetHtml=sections.Select(m=>m.Value).Single(s=>s.Contains($"timeline {target.Layer}, T{target.Time} {(target.White?"white":"black")}"));
+                string style=System.Text.RegularExpressions.Regex.Match(targetHtml,"style=\"([^\"]+)\"").Groups[1].Value;
+                double Read(string pattern)=>double.Parse(System.Text.RegularExpressions.Regex.Match(style,pattern).Groups[1].Value,System.Globalization.CultureInfo.InvariantCulture);
+                double left=Read(@"left:([\d.Ee+-]+)px"),top=Read(@"top:([\d.Ee+-]+)px");
+                var matrix=System.Text.RegularExpressions.Regex.Match(style,@"matrix\(([^)]+)\)").Groups[1].Value.Split(',').Select(s=>double.Parse(s,System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+                if(Math.Abs(matrix[1])<.1||matrix[2]!=0||matrix[3]!=1)throw new Exception(mode+" must stand boards upright with an isometric file axis");
+                if((matrix[1]<0)!=(mode=="history"))throw new Exception("The two views must use distinct isometric angles");
+                double sx=13+(flipped?target.Width-1-move.To.X:move.To.X)*36+18;
+                double sy=45+(flipped?move.To.Y:target.Height-1-move.To.Y)*36+18;
+                string path=System.Text.RegularExpressions.Regex.Match(iso,$"class=\"played-travel {side}\" d=\"([^\"]+)\"").Groups[1].Value;
+                var end=path.Split(' ').Last().Split(',').Select(s=>double.Parse(s,System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+                if(Math.Abs(end[0]-(left+matrix[0]*sx))>.001||Math.Abs(end[1]-(top+matrix[1]*sx+sy))>.001)throw new Exception(mode+" travel endpoint does not match the projected original square");
+                var geometry=new MultiverseLayout(position.Boards,mode);
+                foreach(var board in position.Boards)
+                foreach(double bx in new[]{0d,board.Width*36+26d})
+                foreach(double by in new[]{-24d,board.Height*36+86d})
+                {
+                    var corner=geometry.BoardPoint(board,bx,by);
+                    if(corner.X<0||corner.Y<0||corner.X>geometry.Width||corner.Y>geometry.Height)throw new Exception(mode+" camera bounds clip a board");
+                }
+            }
         });
-        Console.WriteLine("PASS persistent travel arrows, branch ancestry and numbered board labels");
+        Console.WriteLine("PASS persistent travel, ancestry, isometric views, flipped arrow alignment and camera bounds");
     }
     public static async Task CheckPreview(PositionView position) {
         var activator=new FixtureActivator(position,null,false);var js=new GameJs();

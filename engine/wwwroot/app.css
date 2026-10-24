@@ -51,14 +51,23 @@ button:active:not(:disabled) { filter:brightness(.96); }
 }
 .multiverse-scale { position:relative; z-index:1; }
 .multiverse-canvas { position:relative; isolation:isolate; transform-origin:0 0; }
+.timeline-map { position:absolute; inset:0 auto auto 0; z-index:1; transform-origin:0 0; pointer-events:none; }
+.board-set { position:absolute; inset:0; z-index:3; pointer-events:none; }
+.board-set>.board { pointer-events:auto; transform-origin:0 0; }
+.multiverse-space.isometric { background-image:none; overflow:hidden; }
+.isometric-floor { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
+.floor-origin { transform:translate(50vw,50vh); }
+.floor-fill { x:calc(-50vw); y:calc(-50vh); width:100%; height:100%; }
+.isometric .other-side .squares { opacity:.65; }
+.isometric .board-frame { box-shadow:-5px 7px 0 var(--shadow); }
 /* These bands cross the boards' centers, underneath their opaque frames. */
 .present-line { position:absolute; top:0; bottom:0; transform:translateX(-50%); z-index:0; pointer-events:none; border-left:var(--band-border) solid var(--paper); border-right:var(--band-border) solid var(--paper); box-shadow:var(--band-shadow) 0 0 var(--shadow); background:var(--cream); }
 .present-line.black { background:#41414d; border-color:#2c2c2e; }
-.present-line.parallel { left:0; right:0; bottom:auto; transform:translateY(-50%); border:0; border-block:var(--band-border) solid var(--paper); box-shadow:0 var(--band-shadow) 0 var(--shadow); }
-.present-line.parallel.black { border-color:#2c2c2e; }
+/* Extend beyond the entire scroll space, including its viewport padding. The
+   containing space clips the strip without adding camera scroll bounds. */
+.present-line.isometric-band { bottom:auto; width:calc(200% + var(--scene-height) + var(--scene-height) + 200vmax); transform:translate(-50%,-50%) rotate(var(--band-angle)); border:0; border-block:var(--band-border) solid var(--paper); box-shadow:0 var(--band-shadow) 0 var(--shadow); }
+.present-line.isometric-band.black { border-color:#2c2c2e; }
 .timeline-line { position:absolute; height:96px; background:var(--purple); border-top:3px solid var(--purple-border); border-bottom:3px solid var(--purple-border); z-index:1; box-shadow:-9px 10px 0 var(--shadow); pointer-events:none; }
-.timeline-line.parallel { transform:rotate(90deg); transform-origin:0 0; }
-.timeline-line.parallel>span { transform:rotate(-90deg); }
 .timeline-line>span { position:absolute; left:8px; top:-32px; font-size:18px; font-weight:600; }
 .timeline-line>i { position:absolute; right:-76px; top:-51px; width:80px; height:192px; background:var(--purple-border); clip-path:polygon(0 0,100% 50%,0 100%); }
 .timeline-line>i::after { content:""; position:absolute; inset:7px 6px 7px 0; background:var(--purple); clip-path:polygon(0 0,100% 50%,0 100%); }
