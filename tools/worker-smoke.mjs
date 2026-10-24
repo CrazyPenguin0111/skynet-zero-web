@@ -16,7 +16,13 @@ if (!isMainThread) {
 } else {
   const root = path.resolve(process.argv[2] || 'artifacts/publish/wwwroot');
   globalThis.window = {};
-  globalThis.document = {baseURI: pathToFileURL(root + path.sep).href};
+  let keyHandler,dialogOpen=false;
+  globalThis.document = {
+    baseURI: pathToFileURL(root + path.sep).href,
+    addEventListener(type,fn){if(type==='keydown')keyHandler=fn;},
+    removeEventListener(type,fn){if(type==='keydown'&&keyHandler===fn)keyHandler=null;},
+    querySelector(selector){return selector==='[role="dialog"]'&&dialogOpen?{}:null;}
+  };
   globalThis.Worker = class {
     constructor(url) {
       this.thread = new NodeWorker(new URL(import.meta.url), {workerData: {url: url.href}});
@@ -28,6 +34,14 @@ if (!isMainThread) {
   };
   await import(pathToFileURL(path.join(root, 'browser.js')));
   const bridge = window.skynet;
+  const shortcuts=[];
+  bridge.bindKeyboard({invokeMethodAsync(...args){shortcuts.push(args);return Promise.resolve();}});
+  const press=(key,options={})=>keyHandler({key,repeat:false,preventDefault(){},target:{closest:()=>null},...options});
+  press('f');press('W');press('f',{ctrlKey:true});press('a',{isComposing:true});
+  press('f',{target:{closest:()=>({})}});dialogOpen=true;press('d');dialogOpen=false;
+  assert.deepEqual(shortcuts,[['OnShortcut','f',false],['OnShortcut','W',false]]);
+  bridge.unbindKeyboard();assert.equal(keyHandler,null);
+  console.log('PASS shipped keyboard bridge, text-field/dialog guards and cleanup');
   const send = async request => {
     const reply = JSON.parse(await bridge.request(JSON.stringify(request)));
     assert.equal(reply.error, null, reply.error);
@@ -40,7 +54,7 @@ if (!isMainThread) {
     const pending = (await send({command: 'state'})).position;
     const rejected = JSON.parse(await bridge.request('{"command":"unknown"}'));
     assert.match(rejected.error, /Unknown engine command/);
-    const queued = bridge.request('{"command":"analyze","index":0,"strength":3}');
+    const queued = bridge.request('{"command":"analyze","index":0,"strength":100}');
     const cancellation = assert.rejects(queued, /Search cancelled/);
     bridge.cancel();
     await cancellation;
@@ -49,7 +63,7 @@ if (!isMainThread) {
     assert.equal(restored.pendingCount, 1);
     assert.equal(restored.canSubmit, true);
     await send({command: 'submit'});
-    const played = await send({command: 'engine', strength: 0});
+    const played = await send({command: 'engine', strength: 1});
     assert.equal(played.position.turnCount, 2);
     console.log('PASS shipped worker transport, engine errors, cancellation, restart and pending-game restoration');
   } finally {

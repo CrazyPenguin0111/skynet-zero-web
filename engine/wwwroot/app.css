@@ -7,3 +7,32 @@
 /* Short desktop windows retain access to every analysis control. */
 .sidebar{overflow-y:auto;scrollbar-width:thin}
 @media(max-width:760px){.sidebar{overflow:visible}}
+
+/* Controls, turn grid and persistent timeline ancestry. */
+.app-header .help-button{margin-left:auto}
+.sidebar-strength{margin:0 24px 22px}
+.strength-picker{display:grid;gap:8px;min-width:0}
+.strength-label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:#546365}
+.strength-label output{font-size:15px;font-variant-numeric:tabular-nums;font-weight:650;color:#315c50}
+.strength-label output span{font-size:10px;font-weight:400;color:#7f8d81}
+.strength-picker input[type=range]{width:100%;margin:0;accent-color:#437e70;height:22px;cursor:pointer}
+.strength-picker input:disabled{cursor:default;opacity:.5}
+.strength-scale{display:flex;justify-content:space-between;font-size:9px;color:#748778;margin-top:-5px}
+.strength-picker small{font-size:9px;color:#738474;line-height:1.5}
+.modal .strength-picker{margin-top:20px}
+.turn-piece{width:40px;height:40px;flex-shrink:0;filter:drop-shadow(0 1px 2px #17283744)}
+.button kbd{font:600 10px system-ui;padding:2px 5px;border:1px solid currentColor;border-radius:3px;opacity:.65}
+.workspace{background-image:none}
+.turn-timeline-grid{position:absolute;inset:0;z-index:-4;pointer-events:none;background-image:linear-gradient(to right,#d9e3ed35 1px,transparent 1px),linear-gradient(to right,#e9eff277 2px,transparent 2px),linear-gradient(to bottom,#e9eff277 2px,transparent 2px);background-size:var(--half-turn) var(--timeline-row),var(--full-turn) var(--timeline-row),var(--full-turn) var(--timeline-row);background-position:var(--grid-left) var(--grid-top),var(--turn-left) var(--grid-top),var(--turn-left) var(--grid-top)}
+.present-line{width:7px;transform:translateX(-50%);z-index:5;pointer-events:none;background:linear-gradient(#f2d589ee,#f2d58999 85%,transparent);box-shadow:0 0 10px #f2d58944}
+.present-line>span{left:50%;transform:translateX(-50%);padding:4px 7px;border-radius:4px;background:#647990;color:#fff1b6}
+.timeline-line{height:10px;background:#b387c7;border:0;box-shadow:0 0 0 1px #dcc0e052}
+.timeline-line>i{right:-16px;top:-10px;width:28px;height:30px;background:#c6a0d7;clip-path:polygon(0 0,100% 50%,0 100%)}
+.branch-connectors{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:visible}
+.branch-connectors path{fill:none;stroke:#c6a0d7;stroke-width:9;stroke-linecap:round}
+.branch-connectors circle{fill:#e8d4ee;stroke:#9567ac;stroke-width:2}
+.branch-source{position:absolute;top:-17px;left:0;font-size:9px;line-height:1.4;color:#f7e6fb;background:#674f7fb8;border:1px solid #e0bfe844;border-radius:4px;padding:2px 6px;white-space:nowrap}
+@media(max-width:760px){.turn-piece{width:32px;height:32px}.app-header .help-button{margin-left:0}.sidebar-strength{margin-bottom:18px}}
+.check-indicator{flex:none;width:32px;height:32px;border-radius:50%;border:2px solid #ff858b;background:#db2835;color:white;font-size:24px;font-weight:800;line-height:1;box-shadow:0 0 16px #e92d4d55;cursor:pointer}.check-indicator[aria-pressed=true]{outline:2px solid #ffd4d7;outline-offset:3px}.check-preview-notice{border-color:#aa3e50;color:#ffe1e5;background:#3d202c;display:flex;align-items:center;justify-content:space-between;gap:16px}.check-preview-notice button{position:static;flex:none;width:auto;font-size:12px;text-decoration:underline;white-space:nowrap}.check-overlay{position:absolute;left:0;top:0;z-index:9;pointer-events:none;overflow:visible}.check-arrow{fill:none;stroke:#ff424c;stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 1px 2px #17070b)}.checked-royal{fill:#ff263e33;stroke:#ff424c;stroke-width:3}.square:disabled{opacity:1;cursor:default}
+
+.last-search{display:block;margin-top:8px;font-size:10px;color:#64736a}

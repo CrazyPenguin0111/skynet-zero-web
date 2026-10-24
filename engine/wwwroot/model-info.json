@@ -43,6 +43,7 @@
   "browserDifferences": [
     "Single-thread, bounded browser search; strength levels set depth, nodes and time.",
     "Managed float32 C# transformer inference with original weights.",
-    "Optional opening-book ordering is disabled; learned evaluation tables are included."
+    "Optional opening-book ordering is disabled; learned evaluation tables are included.",
+    "Uses the bundled evaluation-table snapshot for play and review, with native root-travel scoping; optional online sacrifice-table learning is disabled."
   ]
 }

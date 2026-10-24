@@ -9,9 +9,14 @@ internal static class Regression
     static void Check(bool ok,string message){checks++;if(!ok)throw new Exception(message);}
     static EngineReply Send(EngineRequest r,bool error=false){var reply=JsonSerializer.Deserialize<EngineReply>(EngineBridge.Dispatch(JsonSerializer.Serialize(r,EngineBridge.Json)),EngineBridge.Json)!;Check(error?reply.Error!=null:reply.Error==null,$"{r.Command}: {reply.Error}");return reply;}
     static PositionView State()=>Send(new("state")).Position!;
-    static string Fingerprint(PositionView p)=>JsonSerializer.Serialize(new{p.Boards,p.White,p.Pending,p.CanSubmit,p.TurnCount,p.Result,p.Even},EngineBridge.Json);
+    static string Fingerprint(PositionView p)=>JsonSerializer.Serialize(new{p.Boards,p.White,p.Pending,p.CanSubmit,p.TurnCount,p.Result,p.Even,p.Branches},EngineBridge.Json);
     public static void Main()
     {
+        var levels=Enumerable.Range(1,100).Select(Strength.FromLevel).ToArray();
+        Check(levels.Select(l=>l.Nodes).Distinct().Count()==100&&levels.Select(l=>l.Milliseconds).Distinct().Count()==100,"Strength must have 100 distinct search budgets");
+        Check(levels.Zip(levels.Skip(1)).All(p=>p.First.Nodes<p.Second.Nodes&&p.First.Milliseconds<p.Second.Milliseconds&&p.First.Depth<=p.Second.Depth),"Strength budgets must increase monotonically");
+        Check(Strength.FromLevel(-1)==levels[0]&&Strength.FromLevel(101)==levels[^1],"Strength range bounds");
+        Check(levels[0].Milliseconds==1000&&levels[^1].Milliseconds==60000&&levels[^1].Nodes==65536&&levels[33].Nodes==512,"Strength endpoints and default budget");
         var model=PortableModel.LoadBundled();
         var vectors=JsonSerializer.Deserialize<VectorCase[]>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"parity-vectors.json")))!;
         using(var table=typeof(PortableModel).Assembly.GetManifestResourceStream("SkynetZero.LearnedTables.bin")!)SacrificeTable.ReadLearned(table,true);
@@ -19,6 +24,7 @@ internal static class Regression
         foreach(var v in vectors){if(v.pgn!=null){var actualFeatures=new float[107];ExtendedEvaluationTermsEncoding.Fill(FENParser.ShadSTDGSMFromString(v.pgn)!,v.white,actualFeatures);Check(actualFeatures.SequenceEqual(v.input),"Production feature parity: "+v.pgn);}var actual=model.Forward(v.input);max=Math.Max(max,Math.Abs(actual-v.expected));Check(Math.Abs(actual-v.expected)<.00002f,$"Model parity {actual} vs {v.expected}");}
         Console.WriteLine($"PASS TorchSharp model parity: {vectors.Length} vectors, max error {max:E3}");
         var s=Send(new("new")).Position!;Check(s.LegalMoves.Length==20,"Initial position must have 20 legal moves");
+        Check(s.CheckPreview is null,"Quiet positions must not expose a check preview");
         Send(new("submit"),error:true);
         string original=Fingerprint(State());Send(new("move",Move:"(0T1)e2e5"),error:true);Check(Fingerprint(State())==original,"Illegal move mutated state");
         Send(new("move",Move:"(0T1)e2e4"));s=State();Check(s.CanSubmit&&s.PendingCount==1,"Pending move not submittable");
@@ -27,7 +33,12 @@ internal static class Regression
         Check(Fingerprint(State())==pending,"Reviewing a submitted position must preserve pending moves");
         Send(new("undo"));Check(Fingerprint(State())==original,"Undo did not restore exact state");
         Send(new("move",Move:"(0T1)e2e4"));Send(new("submit"));Send(new("move",Move:"(0T1)e7e5"));Send(new("submit"));
+        Send(new("move",Move:"(0T2)b1(0T1)b3"));
+        Check(State().Branches is [{Layer:1,ParentLayer:0,ParentTime:1,ParentWhite:true,StartTime:1,StartWhite:false}],"Branch ancestry must identify the destination board");
+        Send(new("undo"));Check(State().Branches.Length==0,"Undo must remove pending branch ancestry");
         Send(new("move",Move:"(0T2)b1(0T1)b3"));Send(new("submit"));s=State();Check(s.Boards.Select(b=>b.Layer).Distinct().Count()==2,"Time travel failed to branch");
+        Check(Send(new("view",Index:2)).Position!.Branches.Length==0,"Historical view must hide future branches");
+        UiChecks.MultiverseHistory(s).GetAwaiter().GetResult();
         string branch=Fingerprint(s);Send(new("import",Pgn:s.Pgn));Check(Fingerprint(State())==branch,"Time-travel round trip changed position");
         Send(new("import",Pgn:"[Board \"standard-t0\"]\n1. (0T1)Pe2e4 / (0T1)Pe7e5\n2. (0T2)Nb1>>(0T1)b3 /\n*"));Check(Fingerprint(State())==branch,"Time-travel example failed");
         Send(new("import",Pgn:"[Board \"standard\"]\n1. e5 @"),error:true);Check(Fingerprint(State())==branch,"Invalid import destroyed previous game");
@@ -50,11 +61,15 @@ internal static class Regression
         Send(new("import",Pgn:"[Board \"Standard - Turn Zero\"]\n1. (L0 T1)e4 / (L0 T1)e5"));Check(State().TurnCount==2,"Display variant names and long coordinates");
         Console.WriteLine("PASS castling, underpromotion and en passant");
         Send(new("import",Pgn:"[Board \"custom\"]\n[Size \"8x8\"]\n[2ppp3/2pkp3/N1ppp3/8/8/8/8/7K:0:1:w]"));
-        var mate=Send(new("analyze",Index:0,Strength:1)).Evaluation!;
+        var mate=Send(new("analyze",Index:0,Strength:34)).Evaluation!;
+        Check(SacrificeTable.CurrentRootTravel is null&&!SacrificeTable.HasScopedSnapshot,"Search evaluation scopes must not leak into another request");
         Console.WriteLine($"Mate fixture: {mate.Display}, {mate.BestTurn}, depth {mate.Depth}, nodes {mate.Nodes}");
         Check(mate.Mate==1&&mate.Winner==true,"Mate in one must be proven and use mate notation");
-        Send(new("engine",Strength:1));s=State();Check(s.Result=="1-0"&&s.Status=="Checkmate","Engine must execute mating turn");
-        var terminal=Send(new("analyze",Index:s.TurnCount,Strength:1)).Evaluation!;Check(terminal.Mate==0&&terminal.Winner==true,"Terminal mate winner");
+        Send(new("engine",Strength:34));s=State();Check(s.Result=="1-0"&&s.Status=="Checkmate","Engine must execute mating turn");
+        Check(s.CheckPreview is {Checks.Length:>0},"Checkmate must expose the native checking attacks");
+        Check(s.EngineStrength==34&&s.Pgn.Contains("[SkynetStrength \"34\"]"),"Export must retain the highest engine strength for review");
+        UiChecks.CheckPreview(s).GetAwaiter().GetResult();
+        var terminal=Send(new("analyze",Index:s.TurnCount,Strength:34)).Evaluation!;Check(terminal.Mate==0&&terminal.Winner==true,"Terminal mate winner");
         Send(new("move",Move:"(0T1)c7c6"),error:true);
         var before=new Evaluation(0,100,null,null,2,20,.1,false,"","CompletedDepth");
         var after=before with{Index=1,Centipawns=-50};
@@ -62,7 +77,20 @@ internal static class Regression
         Check(TurnAnalysis.Compare(1,false,after,before).Loss==150,"Black CPL orientation");
         Check(TurnAnalysis.Compare(1,true,after,before).Loss==0,"CPL must be nonnegative");
         Check(TurnAnalysis.Compare(1,true,before,mate).Loss==null,"Mate transitions excluded from ACPL");
+        Check(TurnAnalysis.Compare(1,true,before,after with{Depth=0,StaticOnly=true,Centipawns=-900}).Loss==null,"An unsearched static score must never produce a blunder label");
         UiChecks.Run(State(),mate).GetAwaiter().GetResult();
+        UiChecks.AnalysisCompletion(State()).GetAwaiter().GetResult();
+        Send(new("import",Pgn:s.Pgn));Check(State().EngineStrength==34,"Imported game must retain engine analysis strength");
+        UiChecks.Keyboard().GetAwaiter().GetResult();
+        Send(new("import",Pgn:"[Board \"custom\"]\n[Size \"8x8\"]\n[k3r3/8/8/8/1b6/8/8/4K3:0:1:w]"));s=State();
+        Check(s.InCheck&&s.CheckPreview?.Checks.Length==2,"Double check must show both attackers");
+        Check(s.Boards.Length==1&&s.CheckPreview!.Boards.Length==2,"Preview must advance the present by one half-turn without changing real boards");
+        Check(s.CheckPreview!.Checks.All(c=>!c.From.White&&!c.To.White),"White check preview uses the following black board");
+        string checkedPgn=s.Pgn;Check(State().Pgn==checkedPgn,"Check preview must not change exported moves");
+        Send(new("import",Pgn:"[Board \"custom\"]\n[Size \"8x8\"]\n[k7/8/8/8/8/8/8/4K3:-0:1:w]\n[k7/8/8/8/8/8/8/4r2K:+0:1:w]"));s=State();
+        Check(s.InCheck&&s.CheckPreview!.Checks.Any(c=>c.From.L!=c.To.L),"Cross-timeline checks must retain their native coordinates");
+        Send(new("import",Pgn:"[Board \"standard-t0\"]\n1. e4 / e5\n2. a3 / (0T2)Nb8>>(0T1)b6\n*"));
+        UiChecks.MultiverseHistory(State(),false).GetAwaiter().GetResult();
         Console.WriteLine($"PASS {checks} assertions and Razor render checks");
     }
 }

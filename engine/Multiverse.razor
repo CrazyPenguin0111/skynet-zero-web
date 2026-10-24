@@ -1,25 +1,48 @@
 <div class="multiverse-viewport" aria-label="Multiverse chess boards. Scroll to explore time and timelines.">
 @if (Position is not null)
 {
-    var minHalf=Position.Boards.Min(b=>b.Time*2+(b.White?0:1));
-    var maxHalf=Position.Boards.Max(b=>b.Time*2+(b.White?0:1));
-    var minLayer=Position.Boards.Min(b=>b.Layer);var maxLayer=Position.Boards.Max(b=>b.Layer);
-    var boardWidth=Position.Boards.Max(b=>b.Width)*Cell+24;var pitch=boardWidth+68;var row=Position.Boards.Max(b=>b.Height)*Cell+126;
+    var boards=ShowChecks&&Position.CheckPreview is {} preview?preview.Boards:Position.Boards;
+    var minHalf=boards.Min(b=>b.Time*2+(b.White?0:1));
+    var maxHalf=boards.Max(b=>b.Time*2+(b.White?0:1));
+    var minLayer=boards.Min(b=>b.Layer);var maxLayer=boards.Max(b=>b.Layer);
+    var boardWidth=boards.Max(b=>b.Width)*Cell+26;
+    var pitch=Math.Max(boardWidth+100,boards.Max(b=>b.Height)*Cell+126);var row=pitch;
     var width=Math.Max(800,(maxHalf-minHalf+1)*pitch+100);var height=Math.Max(460,(maxLayer-minLayer+1)*row+85);
-    var present=Position.Boards.Where(b=>b.Frontier&&b.Active).Min(b=>b.Time*2+(b.White?0:1));
+    var present=boards.Where(b=>b.Frontier&&b.Active).Min(b=>b.Time*2+(b.White?0:1));
+    var gridLeft=80-(pitch-boardWidth)/2;
+    var travelMoves=TravelArrows().ToArray();
+    double BoardCenterY(int layer)=>80+(maxLayer-layer)*row+32+(boards.First(b=>b.Layer==layer).Height*Cell+26)/2d;
+    double X(Square s)=>80+(s.T*2+(s.White?0:1)-minHalf)*pitch+13+(Flipped?boards[0].Width-1-s.X:s.X)*Cell+Cell/2d;
+    double Y(Square s)=>80+(maxLayer-s.L)*row+45+(Flipped?s.Y:boards[0].Height-1-s.Y)*Cell+Cell/2d;
     <div class="multiverse-canvas" style="width:@(width)px;height:@(height)px;--cell:@(Cell)px">
+        <div class="turn-timeline-grid" aria-hidden="true" style="--half-turn:@(pitch)px;--full-turn:@(pitch*2)px;--timeline-row:@(row)px;--grid-left:@(gridLeft)px;--turn-left:@(gridLeft+(minHalf%2!=0?pitch:0))px;--grid-top:56px"></div>
         <div class="time-axis"><span>THE PAST</span><span>TIME FLOWS THIS WAY <b>⟶</b></span></div>
-        <div class="present-line" style="left:@(80+(present-minHalf)*pitch-22)px;height:@(height-70)px"><span>PRESENT</span></div>
+        <div class="present-line" style="left:@(80+(present-minHalf)*pitch+boardWidth/2)px;height:@(height-70)px"><span>PRESENT</span></div>
         @for(int layer=maxLayer;layer>=minLayer;layer--)
         {
-            var l=layer;var y=70+(maxLayer-l)*row;
-            <div class="timeline-line" style="top:@(y+row/2)px;width:@(width-35)px"><span>@LayerLabel(l)</span><i>➤</i></div>
+            var l=layer;var branch=Position.Branches.FirstOrDefault(b=>b.Layer==l);
+            var start=branch is null?12:80+(branch.StartTime*2+(branch.StartWhite?0:1)-minHalf)*pitch;
+            <div class="timeline-line" style="left:@(start)px;top:@(BoardCenterY(l)-5)px;width:@(width-start-36)px" aria-hidden="true">@if(branch is null){<span>@LayerLabel(l)</span>}<i></i></div>
         }
-        @foreach(var board in Position.Boards.OrderBy(b=>b.Time).ThenBy(b=>b.White))
+        <svg class="branch-connectors" width="@width" height="@height" aria-label="Timeline ancestry">
+        @foreach(var branch in Position.Branches)
+        {
+            var fromX=80+(branch.ParentTime*2+(branch.ParentWhite?0:1)-minHalf)*pitch+boardWidth;
+            var toX=80+(branch.StartTime*2+(branch.StartWhite?0:1)-minHalf)*pitch;
+            var midX=(fromX+toX)/2d;
+            <g><title>@LayerLabel(branch.Layer) branched from @LayerLabel(branch.ParentLayer) at T@(branch.ParentTime), @(branch.ParentWhite?"White":"Black")</title>
+                <path d="M @fromX,@BoardCenterY(branch.ParentLayer) C @midX,@BoardCenterY(branch.ParentLayer) @midX,@BoardCenterY(branch.Layer) @toX,@BoardCenterY(branch.Layer)"/>
+                <circle cx="@fromX" cy="@BoardCenterY(branch.ParentLayer)" r="6"/>
+            </g>
+        }
+        </svg>
+        @foreach(var board in boards.OrderBy(b=>b.Time).ThenBy(b=>b.White))
         {
             var half=board.Time*2+(board.White?0:1);var left=80+(half-minHalf)*pitch;var top=80+(maxLayer-board.Layer)*row;
-            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move":"")" style="left:@(left)px;top:@(top)px" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
-                <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@board.Time</span><span>@(board.Frontier?board.Active?"ACTIVE":"INACTIVE":"PAST")</span></header>
+            var origin=Position.Branches.FirstOrDefault(b=>b.Layer==board.Layer&&b.StartTime==board.Time&&b.StartWhite==board.White);
+            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move":"") @(board.Frontier&&board.Active&&half==present?"present":"")" style="left:@(left)px;top:@(top)px;width:@(board.Width*Cell+26)px" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
+                @if(origin is not null){<div class="branch-source">Branched from @LayerLabel(origin.ParentLayer) · T@(origin.ParentTime) @(origin.ParentWhite?"White":"Black")</div>}
+                <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@(board.Time)</span><span>@(board.Frontier?board.Active?"ACTIVE":"INACTIVE":"PAST")</span></header>
                 <div class="board-frame"><div class="squares" role="grid" style="grid-template-columns:repeat(@board.Width,var(--cell))">
                 @for(int rank=0;rank<board.Height;rank++)
                 {
@@ -28,9 +51,9 @@
                     {
                         var x=Flipped?board.Width-1-file:file;var square=new Square(x,y,board.Time,board.Layer,board.White);
                         var piece=board.Pieces[y*board.Width+x];var selected=Selected==square;
-                        var destination=Selected is not null&&Position.LegalMoves.Any(m=>m.From==Selected&&m.To==square);
+                        var destination=!ShowChecks&&Selected is not null&&Position.LegalMoves.Any(m=>m.From==Selected&&m.To==square);
                         var last=LastMoves.Any(m=>m.From==square||m.To==square);
-                        <button type="button" role="gridcell" class="square @((x+y)%2==0?"dark":"light") @(selected?"selected":"") @(destination?"destination":"") @(last?"last-move":"")" @onclick="()=>OnSquare.InvokeAsync(square)" aria-label="@SquareLabel(square,piece)" aria-selected="@selected" title="@SquareLabel(square,piece)">
+                        <button type="button" role="gridcell" class="square @((x+y)%2==0?"dark":"light") @(selected?"selected":"") @(destination?"destination":"") @(last?"last-move":"")" @onclick="()=>OnSquare.InvokeAsync(square)" disabled="@ShowChecks" aria-label="@SquareLabel(square,piece)" aria-selected="@selected" title="@SquareLabel(square,piece)">
                             @if(piece!=0){<img class="piece" src="@PieceImage(piece)" alt="@PieceName(piece)" draggable="false"/> @if(IsFairy(piece)){<span class="fairy-badge">@PieceLetter(piece)</span>}}
                             @if(destination){<span class="move-dot"></span>}
                             @if(file==0){<span class="rank-label">@(y+1)</span>}
@@ -42,15 +65,29 @@
                 <footer><span>@LayerLabel(board.Layer)</span><span>@(board.White?"WHITE":"BLACK") TO MOVE</span></footer>
             </section>
         }
-        @if(LastMoves.Any(m=>m.From.L!=m.To.L||m.From.T!=m.To.T))
+        @if(travelMoves.Length>0)
         {
-            <svg class="travel-overlay" width="@width" height="@height" aria-hidden="true"><defs><marker id="travel-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#f0c971"/></marker></defs>
-            @foreach(var move in LastMoves.Where(m=>m.From.L!=m.To.L||m.From.T!=m.To.T))
+            <svg class="travel-overlay" width="@width" height="@height" aria-label="Played time-travel moves"><defs>
+                <marker id="travel-white" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f6f4eb" stroke="#262b30" stroke-width=".4"/></marker>
+                <marker id="travel-black" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#161a20" stroke="#d8dde5" stroke-width=".4"/></marker>
+            </defs>
+            @foreach(var move in travelMoves)
             {
-                double X(Square s)=>80+(s.T*2+(s.White?0:1)-minHalf)*pitch+12+(Flipped?Position.Boards[0].Width-1-s.X:s.X)*Cell+Cell/2;
-                double Y(Square s)=>80+(maxLayer-s.L)*row+36+(Flipped?s.Y:Position.Boards[0].Height-1-s.Y)*Cell+Cell/2;
-                <path d="M @X(move.From),@Y(move.From) Q @((X(move.From)+X(move.To))/2),@(Math.Min(Y(move.From),Y(move.To))-85) @X(move.To),@Y(move.To)" fill="none" stroke="#f0c971" stroke-width="4" marker-end="url(#travel-arrow)"/>
+                var path=$"M {X(move.From)},{Y(move.From)} Q {(X(move.From)+X(move.To))/2},{Math.Min(Y(move.From),Y(move.To))-85} {X(move.To)},{Y(move.To)}";
+                <path d="@path" fill="none" stroke="@(move.White?"#262b30":"#d8dde5")" stroke-width="7"/>
+                <path class="played-travel @(move.White?"white":"black")" d="@path" fill="none" stroke="@(move.White?"#f6f4eb":"#161a20")" stroke-width="4" marker-end="url(#travel-@(move.White?"white":"black"))"><title>@move.Notation</title></path>
             }
+            </svg>
+        }
+        @if(ShowChecks&&Position.CheckPreview is {} checks)
+        {
+            <svg class="check-overlay" width="@width" height="@height" aria-label="Attacks checking royal pieces">
+                <defs><marker id="check-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#ff424c"/></marker></defs>
+                @foreach(var check in checks.Checks)
+                {
+                    <circle class="checked-royal" cx="@X(check.To)" cy="@Y(check.To)" r="@(Cell*.43)"/>
+                    <path class="check-arrow" d="M @X(check.From),@Y(check.From) L @X(check.To),@Y(check.To)" marker-end="url(#check-arrow)"><title>Check from @SquareLabel(check.From,0) to @SquareLabel(check.To,0)</title></path>
+                }
             </svg>
         }
     </div>
@@ -60,9 +97,26 @@
  [Parameter]public PositionView? Position{get;set;}
  [Parameter]public Square? Selected{get;set;}
  [Parameter]public bool Flipped{get;set;}
+ [Parameter]public bool ShowChecks{get;set;}
  [Parameter]public int Cell{get;set;}=36;
  [Parameter]public MoveView[] LastMoves{get;set;}=[];
  [Parameter]public EventCallback<Square> OnSquare{get;set;}
+ private sealed record TravelArrow(Square From,Square To,string Notation,bool White);
+ private IEnumerable<TravelArrow> TravelArrows() {
+    if(Position is null)yield break;
+    var moves=Position.Turns.Where(t=>t.Index<=Position.Viewing)
+        .SelectMany(t=>t.Moves.Select((move,index)=>(Move:move,Turn:t.Index,Action:index+1)))
+        .Concat(Position.Pending.Select((move,index)=>(Move:move,Turn:Position.TurnCount+1,Action:index+1)));
+    foreach(var item in moves) {
+        var move=item.Move;
+        if(move.From.L==move.To.L&&move.From.T==move.To.T)continue;
+        var branch=Position.Branches.FirstOrDefault(b=>b.Turn==item.Turn&&b.Action==item.Action);
+        var arrival=branch is null
+            ?move.To with{T=move.To.T+(move.To.White?0:1),White=!move.To.White}
+            :move.To with{L=branch.Layer,T=branch.StartTime,White=branch.StartWhite};
+        yield return new(move.From,arrival,move.Notation,Math.Abs(move.Piece)<=12);
+    }
+ }
  private string LayerLabel(int layer)=>Position?.Even==true?(layer<=0?$"L −{-layer}":$"L +{layer-1}"):$"L {(layer>0?"+":"")}{layer}";
  public static int Kind(int piece)=>(Math.Abs(piece)-1)%12+1;
  public static bool IsFairy(int piece)=>Kind(piece) is 5 or >=8;

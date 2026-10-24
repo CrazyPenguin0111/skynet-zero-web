@@ -10,16 +10,19 @@ public sealed class GameSession
     private readonly List<TurnView> turns=[];
     private readonly List<GameState> pendingUndo=[];
     private readonly List<MoveView> pending=[];
+    private readonly List<BranchView> branches=[];
     private readonly PortableModel model;
+    private readonly SacrificeTable.Snapshot evaluationTables;
     private string result="*", whiteName="You",blackName="SkynetZero";
+    private int engineStrength;
     private CheckAndMateResult? liveStatus;
-    public GameSession(PortableModel model){this.model=model;New();}
+    public GameSession(PortableModel model){this.model=model;evaluationTables=SacrificeTable.CaptureSnapshot();New();}
     public void New(string? side=null,string? variant=null) {
         string board=variant=="standard"?"standard":"standard-t0";
         initial=FENParser.ShadSTDGSMFromString($"[Board \"{board}\"]")!.Clone();
         initial.QueenPromotionOnly=false;DrawRules.Enable(initial);live=initial.Clone();
-        positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();result="*";liveStatus=null;
-        whiteName=side=="black"?"SkynetZero":"You";blackName=side=="black"?"You":"SkynetZero";
+        positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();result="*";liveStatus=null;
+        whiteName=side=="black"?"SkynetZero":"You";blackName=side=="black"?"You":"SkynetZero";engineStrength=0;
     }
     public static MoveView ViewMove(GameState state,Move move) {
         Square Sq(CoordFive c)=>new(c.X,c.Y,c.T,c.L,c.Color);
@@ -30,6 +33,10 @@ public sealed class GameSession
         var next=live.Clone();
         if(!live.CoordIsPlayable(move.Origin)||!next.MakeMove(move.Clone(),true)||!RoyalLegality.IsLegalAfterMove(live,move,next))
             throw new InvalidDataException("That move is illegal or leaves a royal piece in check.");
+        // A branch descends from the destination board in the past, which may be
+        // on a different timeline from the travelling piece's origin.
+        foreach(var line in next.Multiverse.Where(line=>!live.LayerExists(line.Layer)))
+            branches.Add(new(line.Layer,move.Dest.L,move.Dest.T,move.Dest.Color,line.TStart,line.ColorStart,turns.Count+1,pending.Count+1));
         var view=ViewMove(live,move);pendingUndo.Add(live);pending.Add(view);live=next;liveStatus=null;
     }
     public void Move(string id) {
@@ -39,6 +46,7 @@ public sealed class GameSession
     public void Undo() {
         if(pendingUndo.Count==0)return;
         live=pendingUndo[^1];pendingUndo.RemoveAt(pendingUndo.Count-1);pending.RemoveAt(pending.Count-1);liveStatus=null;
+        branches.RemoveAll(b=>b.Turn==turns.Count+1&&b.Action>pending.Count);
     }
     public void Submit() {
         if(pending.Count==0||!RoyalLegality.CanSubmit(live))throw new InvalidOperationException("Move on the required boards and resolve every check before submitting.");
@@ -66,19 +74,32 @@ public sealed class GameSession
             if(move==null)continue;var next=state.Clone();
             if(next.MakeMove(move.Clone(),true)&&RoyalLegality.IsLegalAfterMove(state,move,next))moves.Add(ViewMove(state,move));
         }
+        return new(BoardViews(state),moves.ToArray(),state.Color,state.Present,current&&pending.Count>0&&RoyalLegality.CanSubmit(state),
+            status.InCheck,status.Status.ToString(),status.Reason,status.WinnerWhite,current?pending.Count:0,turns.Count,viewing,
+            turns.ToArray(),current?pending.ToArray():[],Export(),result,whiteName,blackName,state.EvenStart,
+            branches.Where(b=>current||b.Turn<=viewing).ToArray(),status.InCheck?CheckPreview(state):null,engineStrength);
+    }
+    private static BoardView[] BoardViews(GameState state) {
         var boards=new List<BoardView>();
         foreach(var line in state.Multiverse) {
             void Add(List<Board> list,int start,bool white){for(int i=0;i<list.Count;i++){var b=list[i];boards.Add(new(line.Layer,start+i,white,b.Width,b.Height,(int[])b.Brd.Clone(),line.IsMostRecentTime(start+i,white),state.LayerIsActive(line.Layer)));}}
             Add(line.WBoards,line.WhiteStart,true);Add(line.BBoards,line.BlackStart,false);
         }
-        return new(boards.ToArray(),moves.ToArray(),state.Color,state.Present,current&&pending.Count>0&&RoyalLegality.CanSubmit(state),
-            status.InCheck,status.Status.ToString(),status.Reason,status.WinnerWhite,current?pending.Count:0,turns.Count,viewing,
-            turns.ToArray(),current?pending.ToArray():[],Export(),result,whiteName,blackName,state.EvenStart);
+        return boards.ToArray();
+    }
+    private static CheckPreviewView CheckPreview(GameState state) {
+        // Native check detection advances the active present boards by one
+        // half-turn. Keep that hypothetical position separate from the game.
+        var preview=state.Clone();HypercuboidGameAdapter.IsInCheck(preview);
+        var threats=new List<Move>();HypercuboidGameAdapter.FindDirectThreat(preview,state.Color,threats:threats);
+        Square Sq(CoordFive c)=>new(c.X,c.Y,c.T,c.L,c.Color);
+        return new(BoardViews(preview),threats.Select(t=>new CheckView(Sq(t.Origin),Sq(t.Dest))).ToArray());
     }
     public string Export() {
         string Safe(string s)=>s.Replace('"','\'').Replace('\n',' ').Replace('\r',' ');
         var b=new StringBuilder($"[Event \"SkynetZero local game\"]\n[Site \"SkynetZero Web\"]\n[White \"{Safe(whiteName)}\"]\n[Black \"{Safe(blackName)}\"]\n[Result \"{result}\"]\n[Board \"custom\"]\n[Size \"{initial.Width}x{initial.Height}\"]\n[Color \"{(initial.Color?"white":"black")}\"]\n");
         b.AppendLine("[Mode \"5D\"]");
+        if(engineStrength>0)b.AppendLine($"[SkynetStrength \"{engineStrength}\"]");
         string promotions=string.Join(' ',Enumerable.Range(2,11).Where(t=>t!=7&&initial.PromotionAllowed(t)).Select(t=>Board.PieceChars[t]));
         b.AppendLine($"[Promotions \"{promotions}\"]");
         if(pending.Count>0)b.AppendLine("[SkynetPartial \"true\"]");
@@ -124,8 +145,9 @@ public sealed class GameSession
             int all=Enumerable.Range(2,11).Where(t=>t!=7).Aggregate(0,(m,t)=>m|(1<<t));
             initial.PromotionMask=mask==all?0:mask;
         }
-        DrawRules.Enable(initial);live=initial.Clone();positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();liveStatus=null;result="*";
+        DrawRules.Enable(initial);live=initial.Clone();positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();liveStatus=null;result="*";
         whiteName=tags.GetValueOrDefault("White","White");blackName=tags.GetValueOrDefault("Black","Black");
+        engineStrength=int.TryParse(tags.GetValueOrDefault("SkynetStrength"),out int savedStrength)?Math.Clamp(savedStrength,1,100):-1;
         string text=Regex.Replace(RemoveComments(body.ToString()),@"\(L\s*([+-]?\d+)\s+T\s*(\d+)\)","($1T$2)",RegexOptions.IgnoreCase);int offset=0;
         while(offset<text.Length) {
             if(char.IsWhiteSpace(text[offset])){offset++;continue;}
@@ -164,10 +186,15 @@ public sealed class GameSession
         Move?[] actions=search.Result?.CompleteTurnMoves??[];
         if(actions.Length==0)throw new InvalidOperationException("No complete turn was found. Try a higher strength or retry the search.");
         foreach(var move in actions){if(move==null){if(pending.Count>0)Submit();}else Apply(move);}
-        if(pending.Count>0)Submit();return search.Evaluation;
+        if(pending.Count>0)Submit();engineStrength=Math.Max(engineStrength,Strength.FromLevel(strength).Level);return search.Evaluation;
     }
     private (AlphaBetaResult? Result,Evaluation Evaluation) Search(GameState source,int index,int strength) {
-        var state=source.Clone();bool white=state.Color;var level=Strength.All[Math.Clamp(strength,0,3)];
+        var state=source.Clone();bool white=state.Color;var level=Strength.FromLevel(strength);
+        // Match native frozen-arena evaluation: the same tables and root travel
+        // routes apply throughout a search, instead of treating every leaf as
+        // a new root and awarding new travel opportunities inconsistently.
+        using var tables=SacrificeTable.UseSnapshot(evaluationTables);
+        using var travel=SacrificeTable.UseRootTravel(SacrificeTable.CaptureRootTravel(state));
         var proof=CheckAndMate.Analyze(state,new(){MaxWork=100000,MaxMilliseconds=250});
         if(proof.IsTerminal)return(null,new(index,proof.WinnerWhite==null?0:null,proof.WinnerWhite!=null?0:null,proof.WinnerWhite,0,0,0,false,"",proof.Status.ToString()));
         var settings=new AlphaBetaSettings {CompleteTurnDepth=level.Depth,MaxNodes=level.Nodes,Threads=1,MaxActionsPerTurn=32,TranspositionEntries=4096,QuiescenceTurns=1};

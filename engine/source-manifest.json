@@ -50,7 +50,8 @@
     "GameState: remove three TorchSharp-only tensor constructors. Preserve PGN promotion restrictions through clone, validation, enumeration and state hashing; zero mask retains native promotion defaults.",
     "BrowserHelpers: extracted capture, timeline penalty, action key, BookAction and semantic serialization helpers; no training entrypoint.",
     "AlphaBetaSearch: retain settings/result contracts and constants; browser uses CompleteTurnAlphaBetaSearch.",
-    "CompleteTurnAlphaBetaSearch: omit optional book ordering (the browser supplies no book), retain complete-turn search algorithm and proof semantics."
+    "CompleteTurnAlphaBetaSearch: omit optional book ordering (the browser supplies no book), retain complete-turn search algorithm and proof semantics.",
+    "HypercuboidGameAdapter: optional threat collector exposes every native check for a read-only one-half-turn preview; search still exits on the first threat."
   ],
   "baseCommit": "abe6ef717c92a4d13e9d6a2d862053a323b48eeb"
 }

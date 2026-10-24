@@ -427,7 +427,7 @@ internal sealed class HypercuboidGameAdapter
     internal static bool HasDirectThreat(GameState state, bool defender, HcBudget? budget = null) =>
         FindDirectThreat(state, defender, budget) != null;
 
-    internal static Move? FindDirectThreat(GameState state, bool defender, HcBudget? budget = null)
+    internal static Move? FindDirectThreat(GameState state, bool defender, HcBudget? budget = null, List<Move>? threats = null)
     {
         foreach (Timeline line in state.Multiverse)
         {
@@ -464,7 +464,13 @@ internal sealed class HypercuboidGameAdapter
                         if (target != Board.EMPTYSQUARE)
                         {
                             if (Board.GetColorBool(target) == defender && Board.IsRoyalPiece(target))
-                                return new(new(x, y, line.TEnd, line.Layer, !defender), new(dx, dy, time, layer, !defender));
+                            {
+                                var threat = new Move(new(x, y, line.TEnd, line.Layer, !defender), new(dx, dy, time, layer, !defender));
+                                if (threats == null) return threat;
+                                // The browser preview collects every check using the same
+                                // attack scan; search retains its original early exit.
+                                threats.Add(threat);
+                            }
                             break;
                         }
                         if (!rider) break;
@@ -473,7 +479,7 @@ internal sealed class HypercuboidGameAdapter
                 }
             }
         }
-        return null;
+        return threats?.FirstOrDefault();
     }
 
     private static int AttackSquare(GameState state, int x, int y, int time, int layer, bool white)
