@@ -5,8 +5,8 @@
 Play and analyze 5D chess in a timeline workspace inspired by **5D Chess With Multiverse Time Travel**. The interface, rules, search, model inference and game notation are written in C#. GitHub Pages serves static files; the engine runs on the player's computer as .NET WebAssembly in a dedicated worker. No inference server, account, API key or local engine installation is required.
 
 - Play White, Black or a random side, with a 1–100 strength slider.
-- Move across boards and through time, undo pending moves, then submit a complete multiverse turn with **F**. Use **WASD** to pan; shortcuts pause in dialogs and text fields.
-- Follow the thicker present bar through the present boards, a two-column turn grid, persistent white/black piece-travel arrows and labeled branch connectors. Branch origins are reconstructed from played or imported moves; timelines supplied only as an initial custom setup have no recorded parent.
+- Move across boards and through time, undo pending moves, then submit a complete multiverse turn with **F**. Hold **WASD** for smooth motion in any direction, including diagonals. Scroll to zoom at the pointer; Shift + scroll pans. Shortcuts pause in dialogs and text fields.
+- Play on a full-window checkered canvas with cream/tan boards, broad purple timeline arrows and a wide side-colored present band passing behind the present boards. Moves, engine settings and analysis use a collapsible panel. Follow persistent white/black piece-travel arrows and labeled branch connectors. Branch origins are reconstructed from played or imported moves; timelines supplied only as an initial custom setup have no recorded parent.
 - Click the red **!** in check or checkmate to advance the present boards by one half-turn and reveal red attack arrows. This is a preview; Escape or Return to position restores the actual game.
 - Import a 5DPGN file or paste a game, including explicit custom starting boards.
 - Export completed games and unfinished turns as 5DPGN.
@@ -21,7 +21,7 @@ The bundled model is **v10, epoch 1,040**, from run `20261020-030313-588` after 
 
 TorchSharp's native runtime cannot run in a browser. `PortableModel.cs` therefore evaluates the original 29 float32 tensors in C#, with the same transformer operations and 107 input features. Weights are neither quantized nor retrained. The checkpoint's learned evaluation tables are bundled too. Parity tests compare 26 outputs against the original TorchSharp model, including both perspectives of five actual positions; maximum observed absolute error was **6.706e-8**. The production feature vectors also match exactly.
 
-Browser adaptations are recorded in [source-manifest.json](engine/source-manifest.json). Search is single-threaded and bounded, optional opening-book ordering and online sacrifice-table learning are disabled, evaluation tables are held at the bundled snapshot with native root-travel scoping, training-only tensor constructors are omitted, and the adapter preserves 5DPGN promotion restrictions. Original source hashes and bundled file hashes identify the snapshot, including local source changes.
+Browser adaptations are recorded in [source-manifest.json](engine/source-manifest.json). Search is single-threaded and bounded, optional strategy/tactics book ordering and online sacrifice-table learning are disabled, evaluation tables are held at the bundled snapshot with native root-travel scoping, training-only tensor constructors are omitted, and the adapter preserves 5DPGN promotion restrictions. Original source hashes and bundled file hashes identify the snapshot, including local source changes.
 
 | Slider level | Maximum depth (complete turns) | Node budget | Time budget |
 |---|---:|---:|---:|
@@ -31,6 +31,22 @@ Browser adaptations are recorded in [source-manifest.json](engine/source-manifes
 | 100 | 8 | 65,536 | 60 seconds |
 
 Every intermediate level has its own smoothly increasing node and time budgets. Play and analysis each have a slider. Engine games record the highest played strength in a `SkynetStrength` PGN tag; analysis cannot use a weaker budget. Older engine exports without this tag use maximum analysis. The achieved search depth is shown after each engine move. These are search budgets, not Elo ratings or strict wall-clock guarantees. A complex complete-turn generation or legality check can exceed the time budget. **Stop** terminates the worker and restores the game. If no search depth completes, the UI labels the score as a static evaluation and any playable fallback explicitly.
+
+## Opening repertoire
+
+Engine play now uses the supplied SkynetZero opening books before searching. The frozen repertoire contains **368 source lines**, compiled into **791 choices at 661 exact historical positions**. It includes the opening PDF repertoire, the original-Standard f7 defenses, and the Turn-Zero London Ng5 lines. The compiler replayed and validated all **9,949 plies** with the bundled C# rules. Source documents and seed-file hashes are retained in `engine/Resources/openings.json`.
+
+`OpeningRepertoire.cs` follows native `KnowledgeBooks.TryChoose`: full historical-state keys, variant separation, source weights with duplicate prefixes counted once, side-specific recommendations and strict royal-safety/turn-completion checks. Documented alternatives are sampled by their source weights. Pending turns, checks, branched games and positions outside the repertoire fall back to the normal search. No unapproved learned discoveries are included. This book is separate from the frozen model weights.
+
+A book move is identified as **Opening book** in the engine panel and has no invented centipawn or mate score. Position/game analysis always searches, including opening positions.
+
+To rebuild from the original checkout's supplied books, run:
+
+```sh
+dotnet run --project tests/EngineTests.csproj -c Release -- --export-book /path/to/SkynetZero/resources/books engine/Resources/openings.json
+```
+
+Review changes and deliberately update the bundle checksum afterward. Normal builds use the committed index and do not need the original checkout.
 
 ## Analysis and notation
 
@@ -54,12 +70,13 @@ dotnet run --project tests/EngineTests.csproj -c Release
 dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
 node tools/wasm-smoke.mjs
 node tools/worker-smoke.mjs
+node tools/browser-controls.mjs
 python3 -m http.server 4183 --directory artifacts/publish/wwwroot
 ```
 
 Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. Game calculation and analysis stay local after assets load. The app has no analytics or game-upload endpoint.
 
-`tests/Program.cs` covers model/feature parity, strict moves, pending undo, time travel, multi-board turns, import/export, promotion restrictions, mate proof and loss orientation. `tests/UiChecks.cs` renders real Razor components. The Node integration tests execute the **published browser WebAssembly**, including the actual worker bridge and cancellation. They do not substitute for an interactive visual browser check.
+`tests/Program.cs` covers model/feature parity, strict moves, pending undo, time travel, multi-board turns, import/export, promotion restrictions, mate proof and loss orientation. `tests/UiChecks.cs` renders real Razor components. The Node integration tests execute the **published browser WebAssembly**, including opening-book play, the actual worker bridge and cancellation. A controlled-clock DOM fixture checks continuous diagonal panning, display-rate independence, keyboard release/blur/dialog guards and pointer-centered wheel zoom. They do not substitute for an interactive visual browser check.
 
 ## GitHub Pages
 

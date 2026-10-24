@@ -44,14 +44,16 @@
     "5DChess/5DReWrite/Turn.cs": "23745621d50089414d2b06319ce6ba29a8798f9f2cad2f61fd0b4ed3f951f08c",
     "5DChess/FileIO/StringUtils.cs": "739e068eb6e1b978b4370bd4a4cad75c643aacadb9b021f170e38b9c57cc6b6a",
     "5DChess/FileIO/FENParser.cs": "465f50d0f5e4db9e7a69cf3da6552938ac29a83fb804e8303b2580b66cd0b9dc",
-    "5DChess/FileIO/Tree.cs": "e08eba4b55ea76362c23fc99f362b838e39b0f894ce1f725bdf9812300d343a7"
+    "5DChess/FileIO/Tree.cs": "e08eba4b55ea76362c23fc99f362b838e39b0f894ce1f725bdf9812300d343a7",
+    "KnowledgeBooks.cs": "5119432a2a0a546348b5fb4cc82462cc481cb789a85d1fdf2aefdcfea4f4a82c"
   },
   "adaptations": [
     "GameState: remove three TorchSharp-only tensor constructors. Preserve PGN promotion restrictions through clone, validation, enumeration and state hashing; zero mask retains native promotion defaults.",
     "BrowserHelpers: extracted capture, timeline penalty, action key, BookAction and semantic serialization helpers; no training entrypoint.",
     "AlphaBetaSearch: retain settings/result contracts and constants; browser uses CompleteTurnAlphaBetaSearch.",
     "CompleteTurnAlphaBetaSearch: omit optional book ordering (the browser supplies no book), retain complete-turn search algorithm and proof semantics.",
-    "HypercuboidGameAdapter: optional threat collector exposes every native check for a read-only one-half-turn preview; search still exits on the first threat."
+    "HypercuboidGameAdapter: optional threat collector exposes every native check for a read-only one-half-turn preview; search still exits on the first threat.",
+    "OpeningRepertoire: read-only adapter of KnowledgeBooks.TryChoose using the native full-history SemanticStateHash, weighted source alternatives and royal-safety checks. Offline C# compilation of 368 supplied lines validates every ply. Analysis bypasses opening shortcuts; strategy/tactics search ordering and learned discoveries are not bundled."
   ],
   "baseCommit": "abe6ef717c92a4d13e9d6a2d862053a323b48eeb"
 }

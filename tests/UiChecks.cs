@@ -101,6 +101,15 @@ internal static class UiChecks
             if(js.Commands.Count!=0||js.Pans.Count!=0)throw new Exception("Hotkeys escaped dialog/review/repeat guards");
             Set("_busy",true);await app.OnShortcut("D",false);Set("_busy",false);
             if(js.Pans is not [(120,0)])throw new Exception("WASD must pan while thinking");
+            int Cell()=>(int)typeof(App).GetField("_cell",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(app)!;
+            Set("_busy",true);await app.OnWheelZoom(1,300,260);Set("_busy",false);
+            if(Cell()!=38)throw new Exception("Wheel zoom must remain available while thinking");
+            Set("_help",true);await app.OnWheelZoom(1,300,260);Set("_help",false);
+            if(Cell()!=38)throw new Exception("Wheel zoom escaped dialog guard");
+            for(int i=0;i<15;i++)await app.OnWheelZoom(4,300,260);
+            if(Cell()!=72)throw new Exception("Zoom upper bound");
+            for(int i=0;i<15;i++)await app.OnWheelZoom(-4,300,260);
+            if(Cell()!=12)throw new Exception("Zoom lower bound");
             await app.OnShortcut("F",false);
             if(!js.Commands.SequenceEqual(new[]{"submit","engine"})||Send(new("state")).Position!.TurnCount!=2)throw new Exception("F must submit and play exactly one engine reply");
         });
@@ -113,7 +122,7 @@ internal static class UiChecks
             if(component is App) {
                 App=(App)component;
                 void Set(string field,object value)=>typeof(App).GetField(field,BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(component,value);
-                Set("_position",position);Set("_review",review);Set("_viewIndex",evaluation?.Index??position.Viewing);Set("_strength",1);
+                Set("_position",position);Set("_review",review);Set("_panelOpen",review);Set("_viewIndex",evaluation?.Index??position.Viewing);Set("_strength",1);
                 var values=(Dictionary<int,Evaluation>)typeof(App).GetField("_evaluations",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(component)!;if(evaluation!=null)values[evaluation.Index]=evaluation;
             }
             return component;

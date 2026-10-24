@@ -182,6 +182,11 @@ public sealed class GameSession
     public Evaluation Play(int strength) {
         if(pending.Count!=0)throw new InvalidOperationException("Submit your pending turn first.");
         if(UpdateStatus().IsTerminal||result!="*")throw new InvalidOperationException("This game has ended.");
+        if(OpeningRepertoire.Bundled.Value.TryChoose(live,Random.Shared) is {} opening){
+            int index=turns.Count;var move=opening.Action.Move();string notation=ViewMove(live,move).Notation;
+            Apply(move);Submit();engineStrength=Math.Max(engineStrength,Strength.FromLevel(strength).Level);
+            return new(index,null,null,null,0,0,0,false,notation,"OpeningBook",true,opening.Name);
+        }
         var search=Search(live,turns.Count,strength);
         Move?[] actions=search.Result?.CompleteTurnMoves??[];
         if(actions.Length==0)throw new InvalidOperationException("No complete turn was found. Try a higher strength or retry the search.");

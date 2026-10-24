@@ -9,3 +9,5 @@ artifacts/
 core
 core.*
 node_modules/
+__pycache__/
+*.pyc

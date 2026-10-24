@@ -1,28 +1,29 @@
-<div class="multiverse-viewport" aria-label="Multiverse chess boards. Scroll to explore time and timelines.">
+<div class="multiverse-viewport" aria-label="Multiverse chess boards. Hold WASD to pan; scroll to zoom.">
 @if (Position is not null)
 {
+    const int cell=36;var zoom=Cell/36d;
     var boards=ShowChecks&&Position.CheckPreview is {} preview?preview.Boards:Position.Boards;
     var minHalf=boards.Min(b=>b.Time*2+(b.White?0:1));
     var maxHalf=boards.Max(b=>b.Time*2+(b.White?0:1));
     var minLayer=boards.Min(b=>b.Layer);var maxLayer=boards.Max(b=>b.Layer);
-    var boardWidth=boards.Max(b=>b.Width)*Cell+26;
-    var pitch=Math.Max(boardWidth+100,boards.Max(b=>b.Height)*Cell+126);var row=pitch;
+    var boardWidth=boards.Max(b=>b.Width)*cell+26;
+    var pitch=Math.Max(boardWidth+100,boards.Max(b=>b.Height)*cell+126);var row=pitch;
     var width=Math.Max(800,(maxHalf-minHalf+1)*pitch+100);var height=Math.Max(460,(maxLayer-minLayer+1)*row+85);
     var present=boards.Where(b=>b.Frontier&&b.Active).Min(b=>b.Time*2+(b.White?0:1));
     var gridLeft=80-(pitch-boardWidth)/2;
     var travelMoves=TravelArrows().ToArray();
-    double BoardCenterY(int layer)=>80+(maxLayer-layer)*row+32+(boards.First(b=>b.Layer==layer).Height*Cell+26)/2d;
-    double X(Square s)=>80+(s.T*2+(s.White?0:1)-minHalf)*pitch+13+(Flipped?boards[0].Width-1-s.X:s.X)*Cell+Cell/2d;
-    double Y(Square s)=>80+(maxLayer-s.L)*row+45+(Flipped?s.Y:boards[0].Height-1-s.Y)*Cell+Cell/2d;
-    <div class="multiverse-canvas" style="width:@(width)px;height:@(height)px;--cell:@(Cell)px">
-        <div class="turn-timeline-grid" aria-hidden="true" style="--half-turn:@(pitch)px;--full-turn:@(pitch*2)px;--timeline-row:@(row)px;--grid-left:@(gridLeft)px;--turn-left:@(gridLeft+(minHalf%2!=0?pitch:0))px;--grid-top:56px"></div>
-        <div class="time-axis"><span>THE PAST</span><span>TIME FLOWS THIS WAY <b>⟶</b></span></div>
-        <div class="present-line" style="left:@(80+(present-minHalf)*pitch+boardWidth/2)px;height:@(height-70)px"><span>PRESENT</span></div>
+    double BoardCenterY(int layer)=>80+(maxLayer-layer)*row+32+(boards.First(b=>b.Layer==layer).Height*cell+26)/2d;
+    double X(Square s)=>80+(s.T*2+(s.White?0:1)-minHalf)*pitch+13+(Flipped?boards[0].Width-1-s.X:s.X)*cell+cell/2d;
+    double Y(Square s)=>80+(maxLayer-s.L)*row+45+(Flipped?s.Y:boards[0].Height-1-s.Y)*cell+cell/2d;
+    <div class="multiverse-space" style="--full-turn:@(pitch*2*zoom)px;--timeline-row:@(row*zoom)px;--turn-left:@((gridLeft+(minHalf%2!=0?pitch:0))*zoom)px;--grid-top:@((BoardCenterY(maxLayer)-row/2d)*zoom)px">
+    <div class="multiverse-scale" style="width:@(width*zoom)px;height:@(height*zoom)px">
+    <div class="multiverse-canvas" data-zoom="@zoom" style="width:@(width)px;height:@(height)px;--cell:@(cell)px;transform:scale(@zoom)">
+        <div class="present-line @(present%2==0?"white":"black")" aria-label="Present" style="left:@(80+(present-minHalf)*pitch+boardWidth/2d)px;width:@(boardWidth*.76)px"></div>
         @for(int layer=maxLayer;layer>=minLayer;layer--)
         {
             var l=layer;var branch=Position.Branches.FirstOrDefault(b=>b.Layer==l);
             var start=branch is null?12:80+(branch.StartTime*2+(branch.StartWhite?0:1)-minHalf)*pitch;
-            <div class="timeline-line" style="left:@(start)px;top:@(BoardCenterY(l)-5)px;width:@(width-start-36)px" aria-hidden="true">@if(branch is null){<span>@LayerLabel(l)</span>}<i></i></div>
+            <div class="timeline-line" style="left:@(start)px;top:@(BoardCenterY(l)-48)px;width:@(width-start-96)px" aria-hidden="true">@if(branch is null){<span>@LayerLabel(l)</span>}<i></i></div>
         }
         <svg class="branch-connectors" width="@width" height="@height" aria-label="Timeline ancestry">
         @foreach(var branch in Position.Branches)
@@ -32,7 +33,7 @@
             var midX=(fromX+toX)/2d;
             <g><title>@LayerLabel(branch.Layer) branched from @LayerLabel(branch.ParentLayer) at T@(branch.ParentTime), @(branch.ParentWhite?"White":"Black")</title>
                 <path d="M @fromX,@BoardCenterY(branch.ParentLayer) C @midX,@BoardCenterY(branch.ParentLayer) @midX,@BoardCenterY(branch.Layer) @toX,@BoardCenterY(branch.Layer)"/>
-                <circle cx="@fromX" cy="@BoardCenterY(branch.ParentLayer)" r="6"/>
+                <circle cx="@fromX" cy="@BoardCenterY(branch.ParentLayer)" r="12"/>
             </g>
         }
         </svg>
@@ -40,9 +41,9 @@
         {
             var half=board.Time*2+(board.White?0:1);var left=80+(half-minHalf)*pitch;var top=80+(maxLayer-board.Layer)*row;
             var origin=Position.Branches.FirstOrDefault(b=>b.Layer==board.Layer&&b.StartTime==board.Time&&b.StartWhite==board.White);
-            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move":"") @(board.Frontier&&board.Active&&half==present?"present":"")" style="left:@(left)px;top:@(top)px;width:@(board.Width*Cell+26)px" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
+            <section @key="(board.Layer,board.Time,board.White)" class="board @(board.White?"white-turn":"black-turn") @(board.Frontier?"frontier":"historical") @(board.Active?"active":"inactive") @(board.Frontier&&board.White==Position.White?"to-move":"") @(board.Frontier&&board.Active&&half==present?"present":"")" style="left:@(left)px;top:@(top)px;width:@(board.Width*cell+26)px" aria-label="Timeline @LayerLabel(board.Layer), turn @board.Time, @(board.White?"White":"Black")">
                 @if(origin is not null){<div class="branch-source">Branched from @LayerLabel(origin.ParentLayer) · T@(origin.ParentTime) @(origin.ParentWhite?"White":"Black")</div>}
-                <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@(board.Time)</span><span>@(board.Frontier?board.Active?"ACTIVE":"INACTIVE":"PAST")</span></header>
+                <header class="board-caption"><span><i class="side-dot @(board.White?"white":"black")"></i> T@(board.Time)</span></header>
                 <div class="board-frame"><div class="squares" role="grid" style="grid-template-columns:repeat(@board.Width,var(--cell))">
                 @for(int rank=0;rank<board.Height;rank++)
                 {
@@ -62,7 +63,7 @@
                     }
                 }
                 </div></div>
-                <footer><span>@LayerLabel(board.Layer)</span><span>@(board.White?"WHITE":"BLACK") TO MOVE</span></footer>
+                <footer><span>@LayerLabel(board.Layer)</span></footer>
             </section>
         }
         @if(travelMoves.Length>0)
@@ -85,11 +86,13 @@
                 <defs><marker id="check-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#ff424c"/></marker></defs>
                 @foreach(var check in checks.Checks)
                 {
-                    <circle class="checked-royal" cx="@X(check.To)" cy="@Y(check.To)" r="@(Cell*.43)"/>
+                    <circle class="checked-royal" cx="@X(check.To)" cy="@Y(check.To)" r="@(cell*.43)"/>
                     <path class="check-arrow" d="M @X(check.From),@Y(check.From) L @X(check.To),@Y(check.To)" marker-end="url(#check-arrow)"><title>Check from @SquareLabel(check.From,0) to @SquareLabel(check.To,0)</title></path>
                 }
             </svg>
         }
+    </div>
+    </div>
     </div>
 }
 </div>

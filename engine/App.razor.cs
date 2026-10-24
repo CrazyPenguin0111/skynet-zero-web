@@ -12,7 +12,7 @@ public partial class App : IAsyncDisposable
     private Evaluation? _lastSearch;
     private Square? _selected;
     private MoveView[] _promotions=[];
-    private bool _busy,_review,_flipped,_humanWhite=true,_importOpen,_newOpen,_help,_resignOpen,_analyzing,_showChecks,_analysisComplete;
+    private bool _busy,_review,_flipped,_humanWhite=true,_importOpen,_newOpen,_help,_resignOpen,_analyzing,_showChecks,_analysisComplete,_panelOpen,_restoreZoom,_focusAfterRender;
     private string? _error,_message,_importError;
     private string _activity="Loading engine",_importText="",_newSide="white",_variant="standard-t0",_livePgn="";
     private int _strength=Strength.Default,_analysisLevel=Strength.Default,_cell=36,_viewIndex,_operation,_analysisDone;
@@ -24,14 +24,18 @@ public partial class App : IAsyncDisposable
     private bool DialogOpen=>_importOpen||_newOpen||_help||_resignOpen||_promotions.Length>0;
     private bool CanSubmitTurn=>!_busy&&!_review&&!_showChecks&&!IsEngineTurn&&_position is {CanSubmit:true,Result:"*"}&&_viewIndex==_position.TurnCount;
     private string StatusTitle=>_position is null?"Loading":_review?$"Position after turn {_viewIndex}":_viewIndex<_position.TurnCount?"Viewing an earlier turn":_position.Result!="*"?$"Game over · {_position.Result}":_busy?"Thinking":_position.InCheck?$"{(_position.White?"White":"Black")} is in check":IsEngineTurn?"SkynetZero to move":$"You play {(_humanWhite?"White":"Black")}";
-    private string StatusDetail=>_position is null?"":_review?"Click a turn to revisit its position.":_viewIndex<_position.TurnCount?"Use the last-position button to return to your game.":_position.Result!="*"?"Analyze the game to explore your turning points.":_position.CanSubmit?"The present has advanced. Press F to submit your turn.":_position.PendingCount>0?"Continue this turn on the required boards, or undo.":IsEngineTurn?"": "Select a piece on an active board to begin.";
+    private string StatusDetail=>!_review&&!_busy&&_position is {PendingCount:>0,CanSubmit:false,Result:"*"}?"Move on the remaining active boards.":"";
     private double EvalPercent=>SelectedEvaluation is {} e?e.Mate!=null?e.Winner==true?100:0:50+45*Math.Tanh((e.Centipawns??0)/400d):50;
     private double ChartX(int i)=>10+280d*i/Math.Max(1,_position?.TurnCount??1);
     private static double ChartY(Evaluation e)=>39-Math.Clamp(e.Mate!=null?(e.Winner==true?1000:-1000):e.Centipawns??0,-1000,1000)*.033;
     private string ChartPath=>string.Join(' ',_evaluations.Values.OrderBy(e=>e.Index).Select((e,i)=>$"{(i==0?"M":"L")}{ChartX(e.Index).ToString("0.0",CultureInfo.InvariantCulture)},{ChartY(e).ToString("0.0",CultureInfo.InvariantCulture)}"));
     private string ChartAreaPath=>_evaluations.Count==0?"":$"{ChartPath} L{ChartX(_evaluations.Keys.Max()).ToString("0.0",CultureInfo.InvariantCulture)},39 L{ChartX(_evaluations.Keys.Min()).ToString("0.0",CultureInfo.InvariantCulture)},39 Z";
     private string AverageLoss(bool white){var values=_analysis.Values.Where(a=>a.White==white&&a.Loss!=null).Select(a=>a.Loss!.Value).ToArray();return values.Length==0?"—":values.Average().ToString("0.0",CultureInfo.InvariantCulture);}
-    protected override async Task OnAfterRenderAsync(bool firstRender){if(firstRender){_keyboardReference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("skynet.bindKeyboard",_keyboardReference);await Initialize();}}
+    protected override async Task OnAfterRenderAsync(bool firstRender){
+        if(firstRender){_keyboardReference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("skynet.bindKeyboard",_keyboardReference);await Initialize();return;}
+        if(_restoreZoom){_restoreZoom=false;await JS.InvokeVoidAsync("skynet.restoreZoom");}
+        if(_focusAfterRender&&_position is not null){_focusAfterRender=false;await FocusPresent();}
+    }
     private async Task<EngineReply> Call(EngineRequest request) {
         string json=await JS.InvokeAsync<string>("skynet.request",JsonSerializer.Serialize(request,EngineBridge.Json));
         var reply=JsonSerializer.Deserialize<EngineReply>(json,EngineBridge.Json)??throw new InvalidDataException("The engine returned an empty response.");
@@ -54,15 +58,17 @@ public partial class App : IAsyncDisposable
         if(reply==null)return;
         if(!string.IsNullOrWhiteSpace(saved)) {
             var restored=await Execute(new("import",Pgn:saved),"Restoring game");
-            if(restored!=null){_review=true;_humanWhite=restored.Position!.WhiteName!="SkynetZero";await Navigate(_viewIndex);_message="Your last game was restored. Review it here, or return to Play.";}
+            if(restored!=null){_review=true;_panelOpen=true;_humanWhite=restored.Position!.WhiteName!="SkynetZero";await Navigate(_viewIndex);}
         }
+        _focusAfterRender=true;
         StateHasChanged();
     }
     private async Task NewGame() {
-        if(_busy)return;_newOpen=false;_review=false;_humanWhite=_newSide=="random"?Random.Shared.Next(2)==0:_newSide=="white";_flipped=!_humanWhite;
+        if(_busy)return;_newOpen=false;_review=false;_panelOpen=false;_humanWhite=_newSide=="random"?Random.Shared.Next(2)==0:_newSide=="white";_flipped=!_humanWhite;
         _evaluations.Clear();_analysis.Clear();_message=null;_lastSearch=null;_analysisComplete=false;
         var reply=await Execute(new("new",Side:_humanWhite?"white":"black",Variant:_variant),"Starting game");
         if(reply!=null&&!_humanWhite)await EngineMove();
+        _focusAfterRender=true;StateHasChanged();
     }
     private async Task SelectSquare(Square square) {
         if(_busy||_review||_showChecks||_position is null||_position.Result!="*"||IsEngineTurn||_viewIndex!=_position.TurnCount)return;
@@ -81,9 +87,18 @@ public partial class App : IAsyncDisposable
         await Execute(new("view",Index:_review?index:index==_position.TurnCount?-1:index),"Loading position",save:false);
     }
     private Task GoLive()=>Navigate(_position?.TurnCount??0);
-    private async Task PlayMode(){if(_busy)return;_review=false;await GoLive();}
-    private async Task ReviewMode(){if(!_busy){_review=true;_selected=null;_message=null;await Navigate(_viewIndex);}}
+    private async Task PlayMode(){if(_busy)return;_review=false;_panelOpen=false;await GoLive();}
+    private async Task ReviewMode(){if(!_busy){_review=true;_panelOpen=true;_selected=null;_message=null;await Navigate(_viewIndex);}}
     private Task FocusPresent()=>JS.InvokeVoidAsync("skynet.focusPresent").AsTask();
+    private async Task SetZoom(ChangeEventArgs e){if(int.TryParse(e.Value?.ToString(),out int cell))await ChangeZoom(cell);}
+    private async Task ChangeZoom(int cell,double? x=null,double? y=null){
+        if(DialogOpen||_position is null)return;
+        cell=Math.Clamp(cell,12,72);if(cell==_cell)return;
+        await JS.InvokeVoidAsync("skynet.prepareZoom",x,y);
+        _cell=cell;_restoreZoom=true;StateHasChanged();
+    }
+    [JSInvokable]
+    public Task OnWheelZoom(int steps,double x,double y)=>ChangeZoom(_cell+Math.Clamp(steps,-4,4)*2,x,y);
     private void ToggleChecks(){if(_position?.CheckPreview is null)return;_showChecks=!_showChecks;_selected=null;}
     private async Task Export(){if(_position!=null)await JS.InvokeVoidAsync("skynet.download",$"skynetzero-{DateTime.Now:yyyy-MM-dd-HHmm}.5dpgn",_livePgn);}
     private async Task ReadPgnFile(InputFileChangeEventArgs e){try{using var reader=new StreamReader(e.File.OpenReadStream(1_000_000));_importText=await reader.ReadToEndAsync();_importError=null;}catch(Exception ex){_importError=ex.Message;}}
@@ -93,7 +108,7 @@ public partial class App : IAsyncDisposable
         var reply=await Execute(new("import",Pgn:_importText),"Reading 5DPGN");
         if(reply==null){_importError=_error;_error=null;return;}
         _analysisComplete=false;_lastSearch=null;
-        _importOpen=false;_review=true;_evaluations.Clear();_analysis.Clear();_humanWhite=true;_message=$"Imported {_position!.TurnCount} complete turns. Choose Analyze whole game to calculate centipawn loss.";
+        _importOpen=false;_review=true;_panelOpen=true;_evaluations.Clear();_analysis.Clear();_humanWhite=true;_message=null;
         await Navigate(_viewIndex);
         await FocusPresent();
     }
@@ -123,7 +138,7 @@ public partial class App : IAsyncDisposable
                 var reply=await Call(new("analyze",Index:i,Strength:_analysisLevel));if(operation!=_operation)return;
                 if(reply.Evaluation is {} e)RecordEvaluation(e);_analysisDone=i+1;StateHasChanged();
             }
-            _analysisComplete=true;_message="Game analysis complete. Select any turn to inspect its evaluation and centipawn loss.";
+            _analysisComplete=true;_message="Game analysis complete.";
         }catch(Exception e){if(operation==_operation)_error=e.Message;}
         finally{if(operation==_operation){_busy=false;_analyzing=false;}StateHasChanged();}
     }

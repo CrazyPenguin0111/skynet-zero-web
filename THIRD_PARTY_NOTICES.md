@@ -14,6 +14,10 @@ Portions of the search, evaluation and sacrifice tables are adapted from [FirePl
 
 `engine/Resources/fsac_table.bin` is the upstream sacrifice table. `evaluation-tables.bin` is the trained table used with the selected checkpoint. The [original upstream notices](engine/UPSTREAM-NOTICES.md) are retained for context; paths mentioned there refer to the original checkout. In this repository the GPL text is at `LICENSE`, vendored source is at `engine/Vendor`, and resources are at `engine/Resources`.
 
+## Opening repertoire
+
+The supplied SkynetZero book data is compiled into `engine/Resources/openings.json`. This contains factual move sequences indexed as historical positions/actions, source weights and identifying names. It does not include the source documents, illustrations, guide prose or study comments. Sources are **Theory Gang**'s *5D chess opening book v3.0*, **Lawa**'s [f7 sacrifice guide](https://steamcommunity.com/sharedfiles/filedetails/?id=2218187793), and **obama_CAT**'s [London Ng5 study](https://lichess.org/study/lcivLqVK/HNFhAtGQ), as supplied with the original SkynetZero project. Original document hashes and the exact seed-file hashes are recorded in the data. The C# lookup is adapted from SkynetZero's `KnowledgeBooks.TryChoose` under its MIT license.
+
 ## Chess piece artwork
 
 The twelve SVG files in `engine/wwwroot/pieces` are the **Cburnett** set by **Colin M. L. Burnett**, licensed under **GPL-2.0-or-later** and used here under GPL version 3. Retrieved from [lichess-org/lila/public/piece/cburnett](https://github.com/lichess-org/lila/tree/master/public/piece/cburnett); Lichess records this exception in its [COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md). The SVGs are unmodified. Fairy-piece letter badges are generated separately by the application.
@@ -24,4 +28,4 @@ The published application includes Microsoft .NET runtime and Blazor WebAssembly
 
 ## Design reference
 
-The timeline arrangement and blue/cream palette are inspired by [5D Chess With Multiverse Time Travel](https://www.5dchesswithmultiversetimetravel.com/), by Thunkspace. The application uses its own HTML, CSS, layout and logo; no proprietary game graphics or screenshots are distributed. There is no affiliation or endorsement.
+The timeline arrangement, broad arrows, checkered canvas and cream controls are inspired by [5D Chess With Multiverse Time Travel](https://www.5dchesswithmultiversetimetravel.com/), by Thunkspace. The application uses its own HTML, CSS, layout and logo; no proprietary game graphics or screenshots are distributed. There is no affiliation or endorsement.

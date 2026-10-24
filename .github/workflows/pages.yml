@@ -36,6 +36,8 @@ jobs:
         run: node tools/wasm-smoke.mjs
       - name: Test the shipped worker and cancellation
         run: node tools/worker-smoke.mjs
+      - name: Test smooth navigation and pointer-centered zoom
+        run: node tools/browser-controls.mjs
       - name: Configure Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/configure-pages@v5

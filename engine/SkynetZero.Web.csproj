@@ -14,6 +14,7 @@
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Resources/openings.json" LogicalName="SkynetZero.Openings.json" />
     <EmbeddedResource Include="Resources/evaluation-tables.bin" LogicalName="SkynetZero.LearnedTables.bin" />
     <EmbeddedResource Include="Model/weights.json" LogicalName="SkynetZero.Model.json" />
     <EmbeddedResource Include="Resources/fsac_table.bin" LogicalName="SkynetZero.SacrificeTable.bin" />

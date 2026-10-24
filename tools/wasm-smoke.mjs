@@ -9,6 +9,14 @@ const send=request=>{
  const reply=JSON.parse(exports.SkynetZero.Web.EngineBridge.Dispatch(JSON.stringify(request)));
  if(reply.error)throw new Error(reply.error);return reply;
 };
+send({command:'new',side:'black'});
+const opening=send({command:'engine',strength:100});
+if(opening.evaluation.stopReason!=='OpeningBook'||!opening.evaluation.bookName||opening.evaluation.centipawns!==null||opening.position.turnCount!==1)throw new Error('WASM opening-book play failed');
+const openingAnalysis=send({command:'analyze',index:0,strength:1});
+if(openingAnalysis.evaluation.stopReason==='OpeningBook'||openingAnalysis.evaluation.bookName!==null)throw new Error('Analysis must search in-book positions');
+send({command:'new'});send({command:'move',move:'(0T1)g1f3'});send({command:'submit'});
+if(send({command:'engine',strength:100}).evaluation.stopReason!=='OpeningBook')throw new Error('Black opening-book reply failed');
+console.log('PASS published C# opening book for both colors, with independent searched analysis');
 const initial=send({command:'new'}).position;
 if(initial.legalMoves.length!==20)throw new Error('Wrong initial legal moves');
 send({command:'move',move:'(0T1)e2e4'});
@@ -19,6 +27,9 @@ if(played.position.turnCount!==2)throw new Error('Engine failed to submit a comp
 console.log(JSON.stringify({runtime:'browser-wasm',initialMoves:20,engineTurn:played.position.turns.at(-1).notation,elapsedMs:Math.round(performance.now()-started),depth:played.evaluation.depth,nodes:played.evaluation.nodes}));
 const imported=send({command:'import',pgn:played.position.pgn});
 if(imported.position.turnCount!==2)throw new Error('WASM PGN round trip failed');
+send({command:'new'});send({command:'move',move:'(0T1)a2a4'});send({command:'submit'});
+const searched=send({command:'engine',strength:1});
+if(searched.evaluation.stopReason==='OpeningBook'||searched.evaluation.bookName!==null||searched.position.turnCount!==2)throw new Error('Out-of-book engine turn must use search');
 send({command:'import',pgn:'[Board "custom"]\n[Size "8x8"]\n[2ppp3/2pkp3/N1ppp3/8/8/8/8/7K:0:1:w]'});
 const mate=send({command:'analyze',index:0,strength:34}).evaluation;
 if(mate.mate!==1||mate.winner!==true)throw new Error('WASM mate proof failed: '+JSON.stringify(mate));

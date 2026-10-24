@@ -10,8 +10,10 @@ internal static class Regression
     static EngineReply Send(EngineRequest r,bool error=false){var reply=JsonSerializer.Deserialize<EngineReply>(EngineBridge.Dispatch(JsonSerializer.Serialize(r,EngineBridge.Json)),EngineBridge.Json)!;Check(error?reply.Error!=null:reply.Error==null,$"{r.Command}: {reply.Error}");return reply;}
     static PositionView State()=>Send(new("state")).Position!;
     static string Fingerprint(PositionView p)=>JsonSerializer.Serialize(new{p.Boards,p.White,p.Pending,p.CanSubmit,p.TurnCount,p.Result,p.Even,p.Branches},EngineBridge.Json);
-    public static void Main()
+    public static void Main(string[] args)
     {
+        if(args is ["--export-book",var directory,var output]){OpeningBookChecks.Export(directory,output);return;}
+        OpeningBookChecks.Run();
         var levels=Enumerable.Range(1,100).Select(Strength.FromLevel).ToArray();
         Check(levels.Select(l=>l.Nodes).Distinct().Count()==100&&levels.Select(l=>l.Milliseconds).Distinct().Count()==100,"Strength must have 100 distinct search budgets");
         Check(levels.Zip(levels.Skip(1)).All(p=>p.First.Nodes<p.Second.Nodes&&p.First.Milliseconds<p.Second.Milliseconds&&p.First.Depth<=p.Second.Depth),"Strength budgets must increase monotonically");
@@ -23,6 +25,13 @@ internal static class Regression
         double max=0;
         foreach(var v in vectors){if(v.pgn!=null){var actualFeatures=new float[107];ExtendedEvaluationTermsEncoding.Fill(FENParser.ShadSTDGSMFromString(v.pgn)!,v.white,actualFeatures);Check(actualFeatures.SequenceEqual(v.input),"Production feature parity: "+v.pgn);}var actual=model.Forward(v.input);max=Math.Max(max,Math.Abs(actual-v.expected));Check(Math.Abs(actual-v.expected)<.00002f,$"Model parity {actual} vs {v.expected}");}
         Console.WriteLine($"PASS TorchSharp model parity: {vectors.Length} vectors, max error {max:E3}");
+        Send(new("new",Side:"black"));
+        var bookMove=Send(new("engine",Strength:100));
+        Check(bookMove.Evaluation is {StopReason:"OpeningBook",BookName:not null,Centipawns:null,Mate:null}&&bookMove.Position!.TurnCount==1,"Engine play must use the opening book without inventing a score");
+        var openingAnalysis=Send(new("analyze",Index:0,Strength:1)).Evaluation!;
+        Check(openingAnalysis.BookName is null&&openingAnalysis.StopReason!="OpeningBook","Analysis must search even when a position is in the opening book");
+        Send(new("new"));Send(new("move",Move:"(0T1)g1f3"));Send(new("submit"));
+        Check(Send(new("engine",Strength:100)).Evaluation!.BookName is not null,"Black must reply from the opening book");
         var s=Send(new("new")).Position!;Check(s.LegalMoves.Length==20,"Initial position must have 20 legal moves");
         Check(s.CheckPreview is null,"Quiet positions must not expose a check preview");
         Send(new("submit"),error:true);

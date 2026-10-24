@@ -25,11 +25,11 @@ public sealed record Strength(int Level,int Depth,int Nodes,int Milliseconds) {
     }
 }
 public sealed record Evaluation(int Index,int? Centipawns,int? Mate,bool? Winner,int Depth,int Nodes,double Seconds,
-    bool Interrupted,string BestTurn,string StopReason,bool StaticOnly=false)
+    bool Interrupted,string BestTurn,string StopReason,bool StaticOnly=false,string? BookName=null)
 {
     public string Display => Mate is { } mate ? (mate==0?"Checkmate":$"{(Winner==false?"−":"")}M{mate}")
         : Centipawns is { } cp ? (cp>=0?"+":"−")+(Math.Abs(cp)/100d).ToString("0.00",CultureInfo.InvariantCulture) : "—";
-    public string Explanation => Mate is { } m ? (m==0?"Checkmate":$"{(Winner==true?"White":"Black")} has a proven mate in {m}")
+    public string Explanation => BookName is {} book ? $"Opening book · {book}" : Mate is { } m ? (m==0?"Checkmate":$"{(Winner==true?"White":"Black")} has a proven mate in {m}")
         : StaticOnly ? "Static model evaluation; search did not complete a depth" : $"Depth {Depth} · {Nodes:N0} nodes · {Seconds:0.0}s";
 }
 public sealed record TurnAnalysis(int Index,bool White,int? Loss,string Verdict,Evaluation Before,Evaluation After)

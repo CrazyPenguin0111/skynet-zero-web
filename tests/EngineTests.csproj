@@ -4,6 +4,8 @@
 <FrameworkReference Include="Microsoft.AspNetCore.App" />
 <RazorComponent Include="../engine/*.razor" Link="%(Filename)%(Extension)" />
 <Compile Include="../engine/App.razor.cs" />
+<Compile Include="../engine/OpeningRepertoire.cs" />
+<EmbeddedResource Include="../engine/Resources/openings.json" LogicalName="SkynetZero.Openings.json" Condition="Exists('../engine/Resources/openings.json')" />
 <Compile Include="../engine/Vendor/*.cs;../engine/Globals.cs;../engine/PortableModel.cs;../engine/Contracts.cs;../engine/GameSession.cs;../engine/EngineBridge.cs" />
 <EmbeddedResource Include="../engine/Model/weights.json" LogicalName="SkynetZero.Model.json"/>
 <EmbeddedResource Include="../engine/Resources/fsac_table.bin" LogicalName="SkynetZero.SacrificeTable.bin"/>
