@@ -106,6 +106,9 @@ button:active:not(:disabled) { filter:brightness(.96); }
 .branch-source { position:absolute; top:-20px; left:0; font-size:13px; white-space:nowrap; padding:2px 7px; border-radius:5px; background:#e4e4d9e8; }
 .squares { display:grid; border:1px solid #a68e67; }
 .square { width:var(--cell); height:var(--cell); border:0; border-radius:0; padding:1px; position:relative; display:grid; place-items:center; touch-action:manipulation; }
+/* Hover filters create a stacking context; keep an overhanging move badge
+   above adjacent squares and their pieces by raising its owning square. */
+.square:has(.square-review) { z-index:5; }
 .square.light { background:#fad6a5; }
 .square.dark { background:#d1a76f; }
 .square.last-move { background-image:linear-gradient(#eddf5b80,#eddf5b80); }
