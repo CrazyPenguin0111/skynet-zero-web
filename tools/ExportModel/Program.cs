@@ -4,15 +4,21 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using static TorchSharp.torch;
 set_num_threads(1); set_num_interop_threads(1);
-using var model = TurnModel.CreateEvaluationTerms(extended:true);
+if (args.Length < 3) throw new ArgumentException("Expected move.model, output directory and evaluation-tables.bin.");
+string checkpoint = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "checkpoint.json");
+using var metadata = JsonDocument.Parse(File.ReadAllText(checkpoint));
+var version = (TurnModel.InputVersion)metadata.RootElement.GetProperty("MoveInputVersion").GetInt32();
+if (version is not (TurnModel.InputVersion.ExtendedEvaluationTermsTransformer or TurnModel.InputVersion.CompactEvaluationTerms))
+    throw new InvalidDataException($"Unsupported browser model version: {version}");
+using var model = TurnModel.CreateVersion(version);
 model.load(args[0]); model.eval();
 var weights = model.state_dict().ToDictionary(p=>p.Key,p=> new { shape=p.Value.shape, data=p.Value.cpu().flatten().data<float>().ToArray() });
 Directory.CreateDirectory(args[1]);
 File.WriteAllText(Path.Combine(args[1],"weights.json"),JsonSerializer.Serialize(weights));
 using var guard = no_grad();
 var random=new Random(617); var cases=new List<object>();
-for(int i=0;i<16;i++) {
- var input=Enumerable.Range(0,107).Select(_=>(float)(random.NextDouble()*4-2)).ToArray();input[43]=(i%2==0?1:-1)/32f;
+for(int i=0;i<64;i++) {
+ var input=Enumerable.Range(0,107).Select(_=>(float)(random.NextDouble()*2-1)*(i%3==0?200:2)).ToArray();input[43]=(i%2==0?1:-1)/32f;
  using var t=tensor(input).reshape(1,107,1);using var output=model.forward(t);
  cases.Add(new{input,expected=output.item<float>()});
 }
@@ -35,4 +41,4 @@ foreach(string pgn in positions) foreach(bool white in new[]{true,false}) {
  cases.Add(new{input,expected=output.item<float>(),pgn,white});
 }
 File.WriteAllText(Path.Combine(args[1],"parity-vectors.json"),JsonSerializer.Serialize(cases));
-Console.WriteLine($"Exported {weights.Count} tensors; SHA256 {Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(args[0])))}");
+Console.WriteLine($"Exported v{(int)version}: {weights.Count} tensors, {weights.Values.Sum(t => t.data.Length)} parameters, {cases.Count} parity cases; SHA256 {Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(args[0])))}");

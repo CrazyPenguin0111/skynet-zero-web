@@ -21,6 +21,7 @@ internal static class Regression
         Check(levels[0].Milliseconds==1000&&levels[^1].Milliseconds==60000&&levels[^1].Nodes==65536&&levels[33].Nodes==512,"Strength endpoints and default budget");
         Check(levels[^1].Depth==64,"Maximum strength must allow iterative deepening to depth 64 within its time/node budget");
         var model=PortableModel.LoadBundled();
+        Check(model.InputVersion==11,"The website must load the promoted compact v11 model");
         var vectors=JsonSerializer.Deserialize<VectorCase[]>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"parity-vectors.json")))!;
         using(var table=typeof(PortableModel).Assembly.GetManifestResourceStream("SkynetZero.LearnedTables.bin")!)SacrificeTable.ReadLearned(table,true);
         double max=0;

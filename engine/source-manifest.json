@@ -53,7 +53,16 @@
     "AlphaBetaSearch: retain settings/result contracts and constants; browser uses CompleteTurnAlphaBetaSearch.",
     "CompleteTurnAlphaBetaSearch: omit optional book ordering (the browser supplies no book), retain complete-turn search algorithm and proof semantics.",
     "HypercuboidGameAdapter: optional threat collector exposes every native check for a read-only one-half-turn preview; search still exits on the first threat.",
-    "OpeningRepertoire: read-only adapter of KnowledgeBooks.TryChoose using the native full-history SemanticStateHash, weighted source alternatives and royal-safety checks. Offline C# compilation of 368 supplied lines validates every ply. Analysis bypasses opening shortcuts; strategy/tactics search ordering and learned discoveries are not bundled."
+    "OpeningRepertoire: read-only adapter of KnowledgeBooks.TryChoose using the native full-history SemanticStateHash, weighted source alternatives and royal-safety checks. Offline C# compilation of 368 supplied lines validates every ply. Analysis bypasses opening shortcuts; strategy/tactics search ordering and learned discoveries are not bundled.",
+    "PortableModel: implements v11 CompactEvaluationHead and FrozenCompactInference signed-log MLP, raw linear skip, viewpoint canonicalization and score cap with the original eight tensors. v10 export compatibility is retained."
   ],
-  "baseCommit": "abe6ef717c92a4d13e9d6a2d862053a323b48eeb"
+  "baseCommit": "abe6ef717c92a4d13e9d6a2d862053a323b48eeb",
+  "modelSource": {
+    "snapshot": "2026-11-01 working tree",
+    "files": {
+      "CompactEvaluationHead.cs": "98ab3ae70b8f60b003f0675366ee6f4117a7fc8ff9f99e81ef191f13fdd55b0b",
+      "FrozenCompactInference.cs": "06be8eb61f69d292ba89fd9873501c5a4060496682f0680a6be7b90b3a3f768b",
+      "TurnModel.cs": "81c0df81c9cfee8ccae5453c6725a701c90f959dc760ec604c16a1afb0c8b08d"
+    }
+  }
 }

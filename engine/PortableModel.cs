@@ -2,18 +2,36 @@ using System.Numerics;
 using System.Text.Json;
 namespace SkynetZero.Web;
 
-/// <summary>Float32 inference for SkynetZero's v10 term transformer. No retraining or quantization.</summary>
+/// <summary>Inference for the original v10 transformer or v11 compact weights, without quantization.</summary>
 public sealed class PortableModel
 {
     public sealed record Tensor(long[] shape, float[] data);
     private readonly Dictionary<string, Tensor> weights;
+    public int InputVersion { get; }
     private const int Width = 64, Terms = 107;
     private readonly float[] tokens = new float[Terms * Width], qkv = new float[Terms * Width * 3],
         attention = new float[Terms * Width], projected = new float[Terms * Width],
         normalized = new float[Terms * Width], hidden = new float[Terms * 128], scores = new float[Terms],
         features = new float[Terms];
-    public PortableModel(Stream stream) => weights = JsonSerializer.Deserialize<Dictionary<string, Tensor>>(stream)
-        ?? throw new InvalidDataException("Missing model weights.");
+    public PortableModel(Stream stream)
+    {
+        weights = JsonSerializer.Deserialize<Dictionary<string, Tensor>>(stream)
+            ?? throw new InvalidDataException("Missing model weights.");
+        InputVersion = weights.ContainsKey("compactHead.linear.weight") ? 11 : 10;
+        if (InputVersion == 11)
+        {
+            if (weights.Count != 8) throw new InvalidDataException("Unexpected compact model tensors.");
+            foreach (var (name, shape) in new (string, long[])[] {
+                ("hidden1.weight", [64,107]), ("hidden1.bias", [64]),
+                ("hidden2.weight", [32,64]), ("hidden2.bias", [32]),
+                ("output.weight", [1,32]), ("output.bias", [1]),
+                ("linear.weight", [1,107]), ("linear.bias", [1]) })
+                if (!weights.TryGetValue("compactHead." + name, out var tensor) ||
+                    !tensor.shape.SequenceEqual(shape) || tensor.data.LongLength != shape.Aggregate(1L, (a,b) => a*b) ||
+                    tensor.data.Any(value => !float.IsFinite(value)))
+                    throw new InvalidDataException("Invalid compact tensor: " + name);
+        }
+    }
     private float[] W(string name) => weights[name].data;
     public static PortableModel LoadBundled() => new(typeof(PortableModel).Assembly.GetManifestResourceStream("SkynetZero.Model.json")
         ?? throw new InvalidDataException("The bundled SkynetZero checkpoint is missing."));
@@ -27,8 +45,9 @@ public sealed class PortableModel
     // the exact original bounded output above.
     public float ForwardLogit(float[] input)
     {
-        if (input.Length != Terms) throw new ArgumentException("The v10 model requires 107 features.");
+        if (input.Length != Terms) throw new ArgumentException("The model requires 107 features.");
         float orientation = input[MultiverseEvaluation.TempoIndex] > 0 ? -1 : 1;
+        if (InputVersion == 11) return CompactScore(input, orientation);
         var pw = W("termFeatureProj.weight"); var pb = W("termFeatureProj.bias"); var embedding = W("termEmbedding");
         for (int t=0;t<Terms;t++) {
             float x=input[t]*orientation, n=MathF.CopySign(MathF.Log(1+MathF.Abs(x)),x);
@@ -54,6 +73,24 @@ public sealed class PortableModel
         for(int j=0;j<64;j++){float mean=0;for(int t=0;t<Terms;t++)mean+=tokens[t*64+j];result+=mean/Terms*ow[j];}
         for(int t=0;t<Terms;t++)result+=input[t]*orientation*ow[64+t];
         return result*orientation;
+    }
+    private float CompactScore(float[] input, float orientation)
+    {
+        // Same signed-log features and viewpoint as the native frozen v11 evaluator.
+        // Reuse the first rows of the existing buffers; inference allocates no tensors.
+        for (int i=0;i<Terms;i++) {
+            float x=input[i]*orientation;
+            normalized[i]=MathF.CopySign(MathF.Log(1+MathF.Abs(x)),x);
+        }
+        var w1=W("compactHead.hidden1.weight"); var b1=W("compactHead.hidden1.bias");
+        var w2=W("compactHead.hidden2.weight"); var b2=W("compactHead.hidden2.bias");
+        for(int i=0;i<64;i++) hidden[i]=Math.Max(0,Dot(w1,i*Terms,normalized,0,Terms)+b1[i]);
+        for(int i=0;i<32;i++) projected[i]=Math.Max(0,Dot(w2,i*64,hidden,0,64)+b2[i]);
+        double score=W("compactHead.linear.bias")[0];
+        var linear=W("compactHead.linear.weight");
+        for(int i=0;i<Terms;i++) score+=(double)linear[i]*input[i]*orientation;
+        score+=Dot(W("compactHead.output.weight"),0,projected,0,32)+W("compactHead.output.bias")[0];
+        return (float)score*orientation;
     }
     private static float Dot(float[] a,int ai,float[] b,int bi,int length)
     {
