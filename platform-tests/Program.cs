@@ -58,9 +58,10 @@ public static class Runner {
         Check(game1.WhiteId==game2.BlackId&&game1.BlackId==game2.WhiteId,"Colors reverse in game two");
         await Reject(alice.Send($"api/games/{game2.Id}/actions","POST",new GameActionRequest("ready",game2.Version)),HttpStatusCode.Conflict,"Game two cannot start before game one finishes");
         var white=game1.WhiteId==alice.User.Id?alice:bob;var black=white==alice?bob:alice;
-        game1=await white.Post<LiveGameView>($"api/games/{game1.Id}/actions",new GameActionRequest("ready",game1.Version));
-        game1=await black.Post<LiveGameView>($"api/games/{game1.Id}/actions",new GameActionRequest("ready",game1.Version));
-        Check(game1.Status=="active"&&game1.StartedAt!=null,"Clocks begin only when both players are ready");
+        long readyVersion=game1.Version;
+        game1=await white.Post<LiveGameView>($"api/games/{game1.Id}/actions",new GameActionRequest("ready",readyVersion));
+        game1=await black.Post<LiveGameView>($"api/games/{game1.Id}/actions",new GameActionRequest("ready",readyVersion));
+        Check(game1.Status=="active"&&game1.StartedAt!=null,"Both players can ready from the same snapshot; clocks start once");
         await Reject(white.Send($"api/games/{game1.Id}/actions","POST",new GameActionRequest("submit",game1.Version)),HttpStatusCode.BadRequest,"Submitting without a complete legal turn is a validation error");
         await Reject(black.Send($"api/games/{game1.Id}/actions","POST",new GameActionRequest("move",game1.Version,game1.Position.LegalMoves[0].Id)),HttpStatusCode.Forbidden,"The server rejects opponent moves");
         await Reject(white.Send($"api/games/{game1.Id}/actions","POST",new GameActionRequest("move",game1.Version,"made-up-move")),HttpStatusCode.BadRequest,"The server rejects fabricated moves");

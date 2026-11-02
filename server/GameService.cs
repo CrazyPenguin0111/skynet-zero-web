@@ -70,10 +70,13 @@ public sealed class GameService(PlatformDb db,Rules rules,TimeProvider time) {
     }
     public async Task Act(OnlineGame game,Match match,string user,GameActionRequest action){
         if(user!=game.WhiteId&&user!=game.BlackId)throw new ApiError(403,"Only the players may act in this game.");
-        if(action.Version!=game.Version)throw new ApiError(409,"The position changed. Refresh and try again.");
+        // Readiness is an independent flag for each player. Both may click from
+        // the same snapshot; the second request must still start the game.
+        if(action.Action!="ready"&&action.Version!=game.Version)throw new ApiError(409,"The position changed. Refresh and try again.");
         if(game.Status=="finished")throw new ApiError(409,"This game has finished.");
         if(action.Action=="ready"){
-            if(game.Status!="waiting")throw new ApiError(409,"This game has already started.");
+            if(game.Status=="active")return;
+            if(user==game.WhiteId?game.WhiteReady:game.BlackReady)return;
             if(game.Number==2&&await db.Games.AnyAsync(g=>g.MatchId==match.Id&&g.Number==1&&g.Status!="finished"))throw new ApiError(409,"Finish game one before starting game two.");
             if(user==game.WhiteId)game.WhiteReady=true;else game.BlackReady=true;
             if(game.WhiteReady&&game.BlackReady){
