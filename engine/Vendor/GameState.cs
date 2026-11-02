@@ -23,6 +23,8 @@ namespace SkynetZero
         internal bool QueenPromotionOnly;
         // Browser adapter: preserve PGN variant promotion restrictions. Zero retains native defaults.
         internal int PromotionMask;
+        internal bool ForbidWhiteTurnOneTravel;
+        internal bool VariantAllows(Move move) => !ForbidWhiteTurnOneTravel || !move.Origin.Color || move.Dest.T != 1 || move.Origin.T <= 1;
         internal bool PromotionAllowed(int type) => PromotionMask == 0 || (PromotionMask & (1 << type)) != 0;
         public bool Color;
         public int StartPresent;
@@ -340,6 +342,7 @@ namespace SkynetZero
             clone.InitialMaxTL = this.InitialMaxTL;
             clone.QueenPromotionOnly = this.QueenPromotionOnly;
             clone.PromotionMask = this.PromotionMask;
+            clone.ForbidWhiteTurnOneTravel = this.ForbidWhiteTurnOneTravel;
             clone.DrawHistory = this.DrawHistory;
 #if CLONE_IMPACT_STUDY
             if (LegacyCloneModeForStudy)
@@ -563,6 +566,7 @@ namespace SkynetZero
         /// <returns>Bool if the move was made.</returns>
         public bool MakeSilentMove(Move m)
         {
+            if (!VariantAllows(m)) return false;
             if (!IsInBounds(m.Origin) || !IsInBounds(m.Dest))
             {
                 return false;
@@ -662,6 +666,7 @@ namespace SkynetZero
             {
                 return false;
             }
+            if (!VariantAllows(m)) return false;
             if (validate)
             {
                 if (!ValidateMove(m))

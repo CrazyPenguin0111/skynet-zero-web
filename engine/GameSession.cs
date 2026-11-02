@@ -18,11 +18,18 @@ public sealed class GameSession
     private CheckAndMateResult? liveStatus;
     public GameSession(PortableModel model){this.model=model;evaluationTables=SacrificeTable.CaptureSnapshot();New();}
     public void New(string? side=null,string? variant=null) {
-        string board=variant=="standard"?"standard":"standard-t0";
-        initial=FENParser.ShadSTDGSMFromString($"[Board \"{board}\"]")!.Clone();
+        string board=variant??"standard-t0";
+        Import(VariantCatalog.StartingPgn(board));
+        initial=initial.Clone();
         initial.QueenPromotionOnly=false;DrawRules.Enable(initial);live=initial.Clone();
         positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();result="*";liveStatus=null;
         whiteName=side=="black"?"SkynetZero":"You";blackName=side=="black"?"You":"SkynetZero";engineStrength=0;
+    }
+    public void SetPlayers(string white,string black){whiteName=white;blackName=black;engineStrength=0;}
+    public int SnapshotPendingCount()=>pending.Count;
+    public void End(string outcome){
+        if(outcome is not ("1-0" or "0-1" or "1/2-1/2"))throw new InvalidDataException("Invalid result.");
+        while(pending.Count>0)Undo();result=outcome;
     }
     public void Restart(){
         live=initial.Clone();positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();
@@ -117,6 +124,7 @@ public sealed class GameSession
         string Safe(string s)=>s.Replace('"','\'').Replace('\n',' ').Replace('\r',' ');
         var b=new StringBuilder($"[Event \"SkynetZero local game\"]\n[Site \"SkynetZero Web\"]\n[White \"{Safe(whiteName)}\"]\n[Black \"{Safe(blackName)}\"]\n[Result \"{result}\"]\n[Board \"custom\"]\n[Size \"{initial.Width}x{initial.Height}\"]\n[Color \"{(initial.Color?"white":"black")}\"]\n");
         b.AppendLine("[Mode \"5D\"]");
+        if(initial.ForbidWhiteTurnOneTravel)b.AppendLine("[WhiteTurnOneTravel \"forbidden\"]");
         if(engineStrength>0)b.AppendLine($"[SkynetStrength \"{engineStrength}\"]");
         string promotions=string.Join(' ',Enumerable.Range(2,11).Where(t=>t!=7&&initial.PromotionAllowed(t)).Select(t=>Board.PieceChars[t]));
         b.AppendLine($"[Promotions \"{promotions}\"]");
@@ -152,6 +160,10 @@ public sealed class GameSession
         if(parsed.Width is <1 or >8||parsed.Height is <1 or >8||parsed.Multiverse.Count>64)throw new InvalidDataException("Use boards up to 8×8 and at most 64 initial timelines.");
         if(!tags.ContainsKey("Color"))parsed.Color=parsed.CalcPresent();parsed.StartPresent=parsed.Present;
         initial=parsed.Clone();initial.QueenPromotionOnly=false;
+        if(tags.TryGetValue("WhiteTurnOneTravel",out var travel)){
+            if(travel is not ("forbidden" or "allowed"))throw new InvalidDataException("WhiteTurnOneTravel must be forbidden or allowed.");
+            initial.ForbidWhiteTurnOneTravel=travel=="forbidden";
+        }
         if(tags.TryGetValue("Promotions",out var allowed)) {
             int mask=0;
             foreach(char piece in allowed.ToUpperInvariant().Where(char.IsLetter)) {

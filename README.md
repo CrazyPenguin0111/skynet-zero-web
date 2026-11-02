@@ -13,6 +13,18 @@ Play and analyze 5D chess in a timeline workspace inspired by **5D Chess With Mu
 - Review played or imported games with a clickable evaluation graph, vertical advantage bar, move badges, per-turn centipawn loss, White/Black ACPL and proven mate-in-N scores. Play another move after rewinding to create an analysis variation. The line selector preserves the original and every variation for the current session; export saves the selected line as 5DPGN.
 - Stop a search without losing the game. The last game is saved in local browser storage.
 
+## Community platform
+
+The VDS platform adds accounts and Discord linking, live player matches with server clocks, 24 separate Glicko-2 rating pools starting at 1500, public/private studies, direct messages with blocking, player profiles and tournaments. The original bot and analysis board remain available. GitHub Pages keeps running the static bot when the API is absent.
+
+- Variants: Turn Zero, Standard, Reversed Royalty, Princess, Defended Pawn and T1.5. T1.5 uses Standard's position and forbids White from traveling back to Turn 1; Black retains that travel. The rule persists in PGN via `WhiteTurnOneTravel`.
+- Time pools use base seconds plus 40 increments: bullet below 180, blitz below 480, rapid below 1500, classical otherwise. See [Lichess time categories](https://lichess.org/faq#time-controls).
+- Ratings use [Glicko-2](https://www.glicko.net/glicko/glicko2.pdf), initial deviation 350, volatility .06, tau .5. Each completed game is one rating period, with additional daily uncertainty growth during inactivity. Administrative forfeits and byes are not rated.
+- Every actual match contains exactly two games with reversed colors. Formats are round robin, Swiss, single elimination, double elimination (including final reset) and groups into knockout. Use game points or configurable match points. Knockout ties advance the higher initial seed or require an organizer decision; there is no third tie-break game. Swiss repeats are allowed only after the bounded non-repeating pairing search fails.
+- The 5D Chess League retains separate K=25 Elo, imported records and the original bot's rating bands. Administrators open and start each season. See [league source](https://github.com/CrazyPenguin0111/5D-Chess-League-Bot).
+
+[Deployment and operations](deploy/README.md) covers local development, the VDS service, Discord setup, importing the legacy database, administrator access and backups. SQLite state and credentials are excluded from Git and deployment packages. Public studies are readable by anyone; private studies are owner-only. Private tournament invitations are unlisted links, while private match play is restricted to its players and organizer. Studies store chapters, notes and PGN lines; arbitrary analysis variations can be saved as separate chapters.
+
 ## C# engine and model
 
 `engine/Vendor` contains a snapshot of the actual SkynetZero C# rules, strict royal legality, complete-turn alpha-beta search and evaluation-feature code. This is compiled for the browser; there is no JavaScript chess engine. `App.razor`, `Multiverse.razor` and their C# code implement the interface. The small JavaScript files only provide worker transport, storage, downloads, clipboard and scrolling.
@@ -80,7 +92,7 @@ node tools/browser-controls.mjs
 python3 -m http.server 4183 --directory artifacts/publish/wwwroot
 ```
 
-Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. Game calculation and analysis stay local after assets load. The app has no analytics or game-upload endpoint.
+Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. Game calculation and analysis stay local after assets load. The static bot has no analytics. On the VDS, multiplayer games and explicitly saved studies are stored by the server.
 
 `tests/Program.cs` covers model/feature parity, strict moves, pending undo, time travel, multi-board turns, import/export, promotion restrictions, mate proof and loss orientation. `tests/UiChecks.cs` renders real Razor components. The Node integration tests execute the **published browser WebAssembly**, including opening-book play, the actual worker bridge and cancellation. A controlled-clock DOM fixture checks continuous diagonal panning, display-rate independence, keyboard release/blur/dialog guards and pointer-centered wheel zoom. They do not substitute for an interactive visual browser check.
 

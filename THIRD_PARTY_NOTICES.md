@@ -22,6 +22,10 @@ The supplied SkynetZero book data is compiled into `engine/Resources/openings.js
 
 The twelve SVG files in `engine/wwwroot/pieces` are the **Cburnett** set by **Colin M. L. Burnett**, licensed under **GPL-2.0-or-later** and used here under GPL version 3. Retrieved from [lichess-org/lila/public/piece/cburnett](https://github.com/lichess-org/lila/tree/master/public/piece/cburnett); Lichess records this exception in its [COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md). The SVGs are unmodified. Fairy-piece letter badges are generated separately by the application.
 
+## 5D Chess League Bot
+
+League rating updates, rating bands, balanced groups and two color-swapped games per pairing are based on [CrazyPenguin0111/5D-Chess-League-Bot](https://github.com/CrazyPenguin0111/5D-Chess-League-Bot). Its MIT license is retained in [server/LEAGUE-BOT-LICENSE.txt](server/LEAGUE-BOT-LICENSE.txt). The website implements its own account linking, tournament state and persistence. Imported personal records remain private server data and are not distributed with the source or application package.
+
 ## .NET and Blazor
 
 The published application includes Microsoft .NET runtime and Blazor WebAssembly dependencies. These retain the [dotnet/runtime license](https://github.com/dotnet/runtime/blob/main/LICENSE.TXT), [runtime third-party notices](https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT), and [ASP.NET Core license](https://github.com/dotnet/aspnetcore/blob/main/LICENSE.txt). License and notice files from the 10.0.12 packages are bundled in `engine/wwwroot/licenses`. Package versions are recorded in the project file and build output.

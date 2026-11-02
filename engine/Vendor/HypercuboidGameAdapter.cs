@@ -463,7 +463,8 @@ internal sealed class HypercuboidGameAdapter
                         if (target == Board.ERRORSQUARE) break;
                         if (target != Board.EMPTYSQUARE)
                         {
-                            if (Board.GetColorBool(target) == defender && Board.IsRoyalPiece(target))
+                            if (Board.GetColorBool(target) == defender && Board.IsRoyalPiece(target) &&
+                                (!state.ForbidWhiteTurnOneTravel || defender || time != 1 || line.TEnd <= 1))
                             {
                                 var threat = new Move(new(x, y, line.TEnd, line.Layer, !defender), new(dx, dy, time, layer, !defender));
                                 if (threats == null) return threat;

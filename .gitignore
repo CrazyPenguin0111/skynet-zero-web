@@ -11,3 +11,11 @@ core.*
 node_modules/
 __pycache__/
 *.pyc
+**/data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+**/keys/

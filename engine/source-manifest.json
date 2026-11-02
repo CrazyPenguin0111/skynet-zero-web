@@ -54,7 +54,8 @@
     "CompleteTurnAlphaBetaSearch: omit optional book ordering (the browser supplies no book), retain complete-turn search algorithm and proof semantics.",
     "HypercuboidGameAdapter: optional threat collector exposes every native check for a read-only one-half-turn preview; search still exits on the first threat.",
     "OpeningRepertoire: read-only adapter of KnowledgeBooks.TryChoose using the native full-history SemanticStateHash, weighted source alternatives and royal-safety checks. Offline C# compilation of 368 supplied lines validates every ply. Analysis bypasses opening shortcuts; strategy/tactics search ordering and learned discoveries are not bundled.",
-    "PortableModel: implements v11 CompactEvaluationHead and FrozenCompactInference signed-log MLP, raw linear skip, viewpoint canonicalization and score cap with the original eight tensors. v10 export compatibility is retained."
+    "PortableModel: implements v11 CompactEvaluationHead and FrozenCompactInference signed-log MLP, raw linear skip, viewpoint canonicalization and score cap with the original eight tensors. v10 export compatibility is retained.",
+    "Community variants: GameState, MoveGenerator and HypercuboidGameAdapter enforce the T1.5 White turn-one travel restriction during move generation, execution and optimized threat scans. Clone, CompleteTurnStateHash and SemanticStateHash preserve and distinguish this rule. VariantCatalog supplies explicit Reversed Royalty, Princess, Defended Pawn, Standard and Turn Zero setups."
   ],
   "baseCommit": "abe6ef717c92a4d13e9d6a2d862053a323b48eeb",
   "modelSource": {

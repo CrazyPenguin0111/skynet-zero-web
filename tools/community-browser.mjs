@@ -1,0 +1,102 @@
+// Run only against a disposable local platform database. Creates two test accounts.
+// PLAYWRIGHT_MODULE and CHROMIUM_PATH can point to an existing test installation.
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const base=process.argv[2]??'http://127.0.0.1:5088';
+assert(['localhost','127.0.0.1'].includes(new URL(base).hostname),'Use a disposable localhost server');
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
+const output=process.env.SKYNET_SCREENSHOTS??join(tmpdir(),'skynet-community');
+await mkdir(output,{recursive:true});
+const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
+const contexts=await Promise.all([browser.newContext({viewport:{width:1440,height:1000}}),browser.newContext({viewport:{width:1440,height:1000}})]);
+const [alice,bob]=await Promise.all(contexts.map(c=>c.newPage()));
+const errors=[];for(const page of [alice,bob])page.on('pageerror',e=>errors.push(e.message));
+const suffix=Date.now().toString(36),names=['QA_A_'+suffix,'QA_B_'+suffix];
+const api=(page,path)=>page.evaluate(async path=>JSON.parse(await window.community.request(path)),path);
+async function route(page,path,heading){await page.evaluate(path=>location.hash=path,path);if(heading)await page.getByRole('heading',{name:heading,exact:true,level:1}).waitFor();}
+async function signup(page,name){
+  await page.goto(base+'/#account');await page.locator('.auth-tabs').waitFor({timeout:60000});
+  await page.locator('.auth-tabs').getByRole('button',{name:'Create account'}).click();
+  await page.getByLabel('Username',{exact:true}).fill(name);await page.getByLabel('Password',{exact:true}).fill('Browser test password 2026');
+  await page.locator('.auth-card form').getByRole('button',{name:/Create account/}).click();
+  await page.locator('.account-link').filter({hasText:name}).waitFor();
+}
+try{
+  await signup(alice,names[0]);await signup(bob,names[1]);
+  await route(alice,'play');await alice.locator('.community-intro').waitFor();
+  await alice.screenshot({path:join(output,'home.png'),fullPage:true});
+  console.log('PASS browser account registration and authentication');
+  await route(alice,'studies','Studies');await alice.getByRole('button',{name:/New study/}).click();
+  await alice.getByLabel('Study title',{exact:true}).fill('Private opening preparation');
+  await alice.getByLabel('Notes',{exact:true}).fill('A private test note');
+  await alice.getByRole('button',{name:'Save study',exact:true}).click();
+  await alice.getByRole('status').filter({hasText:'Study saved'}).waitFor();
+  const studyId=(await alice.evaluate(()=>location.hash)).split('/')[1];
+  assert(!(await api(bob,'api/studies')).some(s=>s.id===studyId));
+  await alice.getByRole('button',{name:/Explore on analysis/}).click();
+  await alice.getByRole('gridcell').first().waitFor({timeout:60000});
+  await alice.waitForFunction(()=>document.querySelector('.turn-indicator strong')?.textContent?.includes('Position'));
+  assert.equal(await alice.locator('.notice.error').count(),0,'Study PGN must import successfully');
+  await alice.screenshot({path:join(output,'study.png'),fullPage:true});
+  console.log('PASS browser private study editing and analysis board');
+  await route(alice,'messages','Messages');await alice.getByLabel('New conversation').fill(names[1]);
+  await alice.getByRole('button',{name:'Open →',exact:true}).click();
+  // Typing another name must not silently change the active conversation.
+  await alice.getByLabel('New conversation').fill(names[0]);
+  await alice.getByRole('textbox',{name:'Message',exact:true}).fill('Ready for our two games?');
+  await alice.getByRole('button',{name:'Send →',exact:true}).click();
+  await alice.locator('.message-bubble').filter({hasText:'Ready for our two games?'}).waitFor();
+  await route(bob,'messages','Messages');await bob.getByLabel('New conversation').fill(names[0]);
+  await bob.getByRole('button',{name:'Open →',exact:true}).click();
+  await bob.locator('.message-bubble').filter({hasText:'Ready for our two games?'}).waitFor();
+  console.log('PASS browser private messaging between separate sessions');
+  await route(alice,'challenge','Create a match');
+  await alice.getByLabel('Variant',{exact:true}).selectOption('t1.5');
+  await alice.getByLabel('Opponent (optional)').fill(names[1]);await alice.getByLabel('Private invite',{exact:true}).check();
+  await alice.getByRole('button',{name:'Create two-game match →'}).click();
+  const invite=await alice.getByRole('textbox',{name:'Challenge invitation'}).inputValue();
+  await bob.goto(invite);await bob.getByRole('button',{name:/Accept challenge/}).waitFor({timeout:60000});
+  await bob.getByRole('button',{name:/Accept challenge/}).click();await bob.locator('.game-pair').waitFor();
+  const matchId=(await bob.evaluate(()=>location.hash)).split('/')[1],match=await api(bob,'api/matches/'+matchId);
+  assert.equal(match.games.length,2);
+  await route(alice,'game/'+match.games[0]);await route(bob,'game/'+match.games[0]);
+  await alice.getByRole('button',{name:'I’m ready →'}).click();
+  await bob.getByRole('button',{name:'I’m ready →'}).click();
+  const first=await api(alice,'api/games/'+match.games[0]);
+  const white=first.whiteName===names[0]?alice:bob,black=white===alice?bob:alice;
+  await white.locator('.board.present').waitFor();
+  const bounds=await white.locator('.multiverse-viewport').boundingBox();
+  assert(bounds.height>300&&bounds.height<850,'Online board must fit its viewport');
+  await white.getByRole('gridcell',{name:/^e2, White pawn, timeline 0, T1 white$/i}).click();
+  await white.getByRole('gridcell',{name:/^e4, empty, timeline 0, T1 white$/i}).click();
+  await white.getByRole('button',{name:'Submit turn →'}).waitFor();
+  assert.equal((await api(black,'api/games/'+first.id)).position.pendingCount,0);
+  await white.getByRole('button',{name:'Submit turn →'}).click();
+  await black.waitForFunction(()=>document.querySelector('.online-turn strong')?.textContent==='Your turn');
+  await black.reload();await black.locator('.online-turn strong').filter({hasText:'Your turn'}).waitFor({timeout:60000});
+  await white.screenshot({path:join(output,'game.png'),fullPage:true});
+  await black.getByRole('button',{name:'Resign',exact:true}).click();await black.getByRole('button',{name:'Resign game',exact:true}).click();
+  await white.locator('.game-result').waitFor();
+  await route(alice,'game/'+match.games[1]);await route(bob,'game/'+match.games[1]);
+  await alice.getByRole('button',{name:'I’m ready →'}).click();await bob.getByRole('button',{name:'I’m ready →'}).click();
+  await alice.getByRole('button',{name:'Offer draw',exact:true}).click();await bob.getByRole('button',{name:'Accept',exact:true}).click();
+  await alice.locator('.game-result').waitFor();
+  assert.equal((await api(alice,'api/matches/'+matchId)).status,'finished');
+  console.log('PASS browser two-player moves, hidden drafts, reconnect, two games and results');
+  await route(alice,'tournaments','Tournaments');await alice.getByRole('button',{name:/Create tournament/}).click();
+  await alice.getByLabel('Name',{exact:true}).fill('Browser Swiss tournament');await alice.getByLabel('Format',{exact:true}).selectOption('swiss');
+  await alice.getByRole('button',{name:'Open registration →'}).click();await alice.getByRole('heading',{name:'Browser Swiss tournament',exact:true,level:1}).waitFor();
+  const tournamentRoute=await alice.evaluate(()=>location.hash.slice(1));
+  await alice.getByRole('button',{name:'Join tournament',exact:true}).click();
+  await route(bob,tournamentRoute,'Browser Swiss tournament');await bob.getByRole('button',{name:'Join tournament',exact:true}).click();
+  await alice.getByRole('button',{name:'Start tournament →'}).click();await alice.locator('.pairing').first().waitFor();
+  await alice.screenshot({path:join(output,'tournament.png'),fullPage:true});
+  console.log('PASS browser tournament creation, registration and pairings');
+  await alice.setViewportSize({width:390,height:844});await route(alice,'play');await alice.locator('.community-intro').waitFor();
+  await alice.screenshot({path:join(output,'mobile.png'),fullPage:true});
+  assert(await alice.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile home must not overflow horizontally');
+  assert.deepEqual(errors,[]);console.log('PASS mobile layout and no browser runtime errors');
+}catch(error){await alice.screenshot({path:join(output,'failure-alice.png'),fullPage:true});await bob.screenshot({path:join(output,'failure-bob.png'),fullPage:true});throw error;}
+finally{await browser.close();}
