@@ -1,0 +1,32 @@
+[Unit]
+Description=SkynetZero 5D chess community
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skynetzero
+Group=skynetzero
+WorkingDirectory=/opt/skynetzero/current
+EnvironmentFile=/etc/skynetzero/platform.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DataPath=/var/lib/skynetzero
+ExecStart=/opt/skynetzero/current/SkynetZero.Server --urls http://127.0.0.1:5080
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+StateDirectory=skynetzero
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/skynetzero
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+LimitNOFILE=16384
+
+[Install]
+WantedBy=multi-user.target

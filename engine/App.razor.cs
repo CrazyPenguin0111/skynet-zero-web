@@ -7,6 +7,8 @@ using Microsoft.JSInterop;
 namespace SkynetZero.Web;
 public partial class App : IAsyncDisposable
 {
+    [Parameter] public string? InitialPgn {get;set;}
+    [Parameter] public EventCallback<string> SaveStudyPgn {get;set;}
     private DotNetObjectReference<App>? _keyboardReference;
     private PositionView? _position;
     private Evaluation? _lastSearch;
@@ -43,12 +45,13 @@ public partial class App : IAsyncDisposable
         if(_focusAfterRender&&_position is not null){_focusAfterRender=false;await FocusPresent();}
     }
     private async Task<EngineReply> Call(EngineRequest request) {
+        if(request.Command is "engine" or "analyze")request=request with {Pgn=_livePgn};
         string json=await JS.InvokeAsync<string>("skynet.request",JsonSerializer.Serialize(request,EngineBridge.Json));
         var reply=JsonSerializer.Deserialize<EngineReply>(json,EngineBridge.Json)??throw new InvalidDataException("The engine returned an empty response.");
         if(reply.Error!=null)throw new InvalidDataException(reply.Error);return reply;
     }
     private async Task ApplyReply(EngineReply reply,bool save=true) {
-        if(reply.Position is {} p){if(_position?.TurnCount!=p.TurnCount)_analysisComplete=false;_position=p;_viewIndex=p.Viewing;_livePgn=p.Pgn;_selected=null;_showChecks=false;if(AnalysisMinimum>_analysisLevel){_analysisLevel=AnalysisMinimum;_analysisComplete=false;}if(save&&_activeLine==0)await JS.InvokeVoidAsync("skynet.save",p.Pgn);}
+        if(reply.Position is {} p){if(_position?.TurnCount!=p.TurnCount)_analysisComplete=false;_position=p;_viewIndex=p.Viewing;_livePgn=p.Pgn;_selected=null;_showChecks=false;if(AnalysisMinimum>_analysisLevel){_analysisLevel=AnalysisMinimum;_analysisComplete=false;}if(save&&_activeLine==0&&InitialPgn==null)await JS.InvokeVoidAsync("skynet.save",p.Pgn);}
     }
     private async Task<EngineReply?> Execute(EngineRequest request,string activity,bool save=true) {
         if(_busy)return null;
@@ -59,7 +62,7 @@ public partial class App : IAsyncDisposable
     }
     private async Task Initialize() {
         _error=null;
-        string? saved=null;try{saved=await JS.InvokeAsync<string?>("skynet.restore");}catch{}
+        string? saved=InitialPgn;if(saved==null)try{saved=await JS.InvokeAsync<string?>("skynet.restore");}catch{}
         var reply=await Execute(new("state"),"Loading engine",save:false);
         if(reply==null)return;
         if(!string.IsNullOrWhiteSpace(saved)) {

@@ -1,0 +1,57 @@
+@namespace SkynetZero.Web
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+<div class="online-game">
+@if(_error!=null){<div class="community-alert" role="alert">@_error<button @onclick="Reload">Refresh</button></div>}
+@if(_game==null){<div class="community-loading"><div class="spinner"></div><p>Loading game…</p></div>}
+else{
+    <div class="online-heading"><a href="#match/@_game.MatchId">← Two-game match</a><span>@VariantCatalog.All.FirstOrDefault(v=>v.Id==_game.Variant)?.Name · @_game.Category · @(_game.Rated?"Rated":"Casual")</span><span class="connection-state @(_connected?"connected":"")">@(_connected?"Connected":"Reconnecting…")</span></div>
+    <div class="online-layout"><div class="workspace">
+        <div class="online-tools"><button class="small-button" @onclick="()=>_flipped=!_flipped">Flip ⇅</button><button class="small-button" @onclick="Focus">Focus present ⊙</button><label>Zoom<input aria-label="Board zoom" type="range" min="16" max="64" step="2" @bind="_cell"/></label><select aria-label="Board view" @bind="_view"><option value="normal">Normal</option><option value="history">History</option><option value="parallel">Parallel</option></select></div>
+        <Multiverse Position="_game.Position" Selected="_selected" Cell="_cell" Flipped="_flipped" LastMoves="LastMoves" OnSquare="SelectSquare" ViewMode="@_view" AnimateTravel="true"/>
+        <div class="online-turn"><div><strong>@Status</strong><small>@(_game.Position.PendingCount>0?$"{_game.Position.PendingCount} pending moves · submit when the present advances":"WASD / drag to pan · Q/E zoom · F submit · Z undo pending move")</small></div><div class="button-row">@if(CanPlay){<button class="small-button" disabled="@(_busy||_game.Position.PendingCount==0)" @onclick='()=>Act("undo")'>Undo</button><button class="community-button primary" disabled="@(_busy||!_game.Position.CanSubmit)" @onclick='()=>Act("submit")'>Submit turn →</button>}</div></div>
+    </div><aside class="community-card online-sidebar">
+        <div class="player-clock @(!_game.Position.White&&_game.Status=="active"?"ticking":"")"><a href="#player/@_game.BlackName"><img src="pieces/bK.svg" alt="Black"/>@_game.BlackName</a><strong>@Clock(false)</strong></div>
+        <div class="online-moves">@foreach(var turn in _game.Position.Turns){<div><span>@(turn.White?"○":"●") @turn.Index</span><span>@turn.Notation</span></div>}@if(_game.Position.Turns.Length==0){<p class="muted">The multiverse is waiting.</p>}</div>
+        <div class="player-clock @(_game.Position.White&&_game.Status=="active"?"ticking":"")"><a href="#player/@_game.WhiteName"><img src="pieces/wK.svg" alt="White"/>@_game.WhiteName</a><strong>@Clock(true)</strong></div>
+        @if(_game.Status=="waiting"){
+            <div class="ready-panel"><p>Both players must be ready. The clock then starts for White.</p>@if(IsPlayer){<button class="community-button primary full" disabled="@(_busy||_game.Ready.Contains(User!.Id))" @onclick='()=>Act("ready")'>@(_game.Ready.Contains(User!.Id)?"Ready · waiting for opponent":"I’m ready →")</button>}else{<span class="pill">Spectating</span>}</div>
+        }else if(_game.Status=="finished"){
+            <div class="game-result"><strong>@_game.Result</strong><span>@_game.Reason</span><button class="community-button primary full" @onclick="()=>OnReview.InvokeAsync(_game.Position.Pgn)">Analyze game →</button><a href="#match/@_game.MatchId">Back to match / next game →</a><button class="small-button" @onclick="Export">Export 5DPGN</button></div>
+        }else if(IsPlayer){
+            @if(_game.DrawOffer!=null&&_game.DrawOffer!=User!.Id){<div class="draw-offer"><p>Your opponent offers a draw.</p><button class="small-button green" @onclick='()=>Act("accept-draw")'>Accept</button><button class="small-button" @onclick='()=>Act("decline-draw")'>Decline</button></div>}
+            <div class="game-options"><button class="small-button" disabled="@(_game.DrawOffer==User!.Id||_busy)" @onclick='()=>Act("offer-draw")'>@(_game.DrawOffer==User!.Id?"Draw offered":"Offer draw")</button><button class="small-button" @onclick="()=>_resign=true">Resign</button></div>
+        }
+    </aside></div>
+    @if(_resign){<div class="modal-backdrop"><section class="modal compact" role="dialog" aria-modal="true" aria-labelledby="online-resign"><h2 id="online-resign">Resign this game?</h2><p>This ends the current game. The match still contains two games.</p><div class="button-row"><button class="small-button" @onclick="()=>_resign=false">Keep playing</button><button class="community-button primary" @onclick='()=>Act("resign")'>Resign game</button></div></section></div>}
+    @if(_promotions.Length>0){<div class="modal-backdrop"><section class="modal compact" role="dialog" aria-modal="true" aria-labelledby="online-promotion"><h2 id="online-promotion">Choose a promotion</h2><div class="promotion-options">@foreach(var move in _promotions){var m=move;<button @onclick='()=>Act("move",m.Id)'><img src="@Multiverse.PieceImage(m.Promotion)" alt=""/>@Multiverse.PieceName(m.Promotion)</button>}</div><button class="small-button" @onclick="()=>_promotions=[]">Cancel</button></section></div>}
+}
+</div>
+@code{
+    [Parameter,EditorRequired]public string GameId{get;set;}="";
+    [Parameter]public UserView? User{get;set;}
+    [Parameter]public EventCallback<string> OnReview{get;set;}
+    private LiveGameView? _game;private Square? _selected;private MoveView[] _promotions=[];
+    private bool _busy,_refreshing,_connected=true,_flipped,_resign,_focusAfterRender,_restoreZoom;private string? _error;private string _view="normal";private int _cell=36;
+    private DotNetObjectReference<OnlineBoard>? _reference;private readonly CancellationTokenSource _stop=new();private Task? _ticks;private long _received;
+    private bool IsPlayer=>User!=null&&_game!=null&&(User.Id==_game.WhiteId||User.Id==_game.BlackId);
+    private bool CanPlay=>IsPlayer&&_game!.Status=="active"&&(_game.Position.White?_game.WhiteId:_game.BlackId)==User!.Id;
+    private MoveView[] LastMoves=>_game?.Position.PendingCount>0?_game.Position.Pending:_game?.Position.Turns.LastOrDefault()?.Moves??[];
+    private string Status=>_game!.Status switch{"waiting"=>"Waiting for both players","finished"=>$"Game over · {_game.Result}",_=>CanPlay?(_game.Position.InCheck?"You are in check":"Your turn"):$"{(_game.Position.White?_game.WhiteName:_game.BlackName)} to move"};
+    protected override async Task OnAfterRenderAsync(bool first){
+        if(first){_reference=DotNetObjectReference.Create(this);_focusAfterRender=true;await Reload();await JS.InvokeVoidAsync("community.watch","game",GameId,_reference);await JS.InvokeVoidAsync("skynet.bindKeyboard",_reference);_ticks=Tick();return;}
+        if(_game!=null&&_focusAfterRender){_focusAfterRender=false;await Focus();}
+        if(_restoreZoom){_restoreZoom=false;await JS.InvokeVoidAsync("skynet.restoreZoom");}
+    }
+    private async Task Tick(){using var timer=new PeriodicTimer(TimeSpan.FromMilliseconds(100));int ticks=0;try{while(await timer.WaitForNextTickAsync(_stop.Token)){await InvokeAsync(()=>StateHasChanged());if(++ticks%50==0)await InvokeAsync(Reload);}}catch(OperationCanceledException){}}
+    [JSInvokable]public Task CommunityChanged()=>Reload();
+    private async Task Reload(){if(_refreshing||_busy)return;_refreshing=true;try{string raw=await JS.InvokeAsync<string>("community.request","api/games/"+GameId,"GET",null);var next=System.Text.Json.JsonSerializer.Deserialize<LiveGameView>(raw,EngineBridge.Json)!;if(_game==null)_flipped=User?.Id==next.BlackId;if(next.Version!=_game?.Version){_selected=null;_promotions=[];}_game=next;_received=System.Diagnostics.Stopwatch.GetTimestamp();_connected=true;_error=null;}catch(Exception e){_connected=false;_error=e.Message.Split('\n')[0];}finally{_refreshing=false;StateHasChanged();}}
+    private string Clock(bool white){if(_game==null)return"—";double ms=white?_game.WhiteMs:_game.BlackMs;if(_game.Status=="active"&&_game.Position.White==white)ms-=System.Diagnostics.Stopwatch.GetElapsedTime(_received).TotalMilliseconds;ms=Math.Max(0,ms);return ms<10000?$"0:{ms/1000:00.0}":$"{(int)(ms/60000)}:{(int)(ms/1000)%60:00}";}
+    private async Task Act(string action,string? move=null){if(_busy||_game==null)return;_busy=true;_error=null;try{string json=System.Text.Json.JsonSerializer.Serialize(new GameActionRequest(action,_game.Version,move),EngineBridge.Json);string raw=await JS.InvokeAsync<string>("community.request","api/games/"+GameId+"/actions","POST",json);_game=System.Text.Json.JsonSerializer.Deserialize<LiveGameView>(raw,EngineBridge.Json);_received=System.Diagnostics.Stopwatch.GetTimestamp();_selected=null;_promotions=[];_resign=false;_connected=true;}catch(Exception e){_error=e.Message.Split('\n')[0];}finally{_busy=false;StateHasChanged();}await Reload();}
+    private async Task SelectSquare(Square square){if(!CanPlay||_busy)return;if(_selected!=null){var moves=_game!.Position.LegalMoves.Where(m=>m.From==_selected&&m.To==square).ToArray();if(moves.Length>1){_promotions=moves;return;}if(moves.Length==1){await Act("move",moves[0].Id);return;}}_selected=_selected==square?null:_game!.Position.LegalMoves.Any(m=>m.From==square)?square:null;}
+    private Task Focus()=>JS.InvokeVoidAsync("skynet.focusPresent").AsTask();
+    private Task Export()=>JS.InvokeVoidAsync("skynet.download",$"skynetzero-{GameId}.5dpgn",_game!.Position.Pgn).AsTask();
+    [JSInvokable]public async Task OnShortcut(string key,bool repeat){if(_resign||_promotions.Length>0){if(key=="Escape"){_resign=false;_promotions=[];}return;}switch(key.ToLowerInvariant()){case "f":case "enter":if(CanPlay&&_game!.Position.CanSubmit)await Act("submit");break;case "z":case "backspace":if(CanPlay&&_game!.Position.PendingCount>0)await Act("undo");break;case "u":_flipped=!_flipped;break;case "q":_cell=Math.Max(16,_cell-2);break;case "e":_cell=Math.Min(64,_cell+2);break;case "escape":_selected=null;break;}StateHasChanged();}
+    [JSInvokable]public async Task OnWheelZoom(int steps,double x,double y){await JS.InvokeVoidAsync("skynet.prepareZoom",x,y);_cell=Math.Clamp(_cell+Math.Clamp(steps,-4,4)*2,16,64);_restoreZoom=true;StateHasChanged();}
+    public async ValueTask DisposeAsync(){_stop.Cancel();if(_ticks!=null)await _ticks;try{await JS.InvokeVoidAsync("community.stop","game");await JS.InvokeVoidAsync("skynet.unbindKeyboard");}catch{} _reference?.Dispose();_stop.Dispose();}
+}

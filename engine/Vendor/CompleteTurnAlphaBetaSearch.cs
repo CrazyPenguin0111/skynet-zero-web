@@ -12,6 +12,43 @@ internal sealed record CompleteTurnResume(string Key, Move?[][] Actions, int[] S
     string BestKey, int Score, bool Proven, bool Complete, int PvLength)
 { internal Move?[][] PrincipalVariation { get; init; } = []; }
 
+// Deferred move ordering needs the history as it was when its generator was
+// created. Share immutable 256-entry pages instead of copying all 65,536
+// counters (256 KB) at every search node. Writes copy only the affected page.
+internal sealed class CompleteTurnHistory : IReadOnlyList<int>
+{
+    private const int PageBits = 8, PageSize = 1 << PageBits;
+    private readonly int[]?[] pages = new int[SearchHeuristics.HistorySize / PageSize][];
+    public int Count => SearchHeuristics.HistorySize;
+    public int this[int index]
+    {
+        get => pages[index >> PageBits]?[index & (PageSize - 1)] ?? 0;
+        set
+        {
+            int page = index >> PageBits, offset = index & (PageSize - 1);
+            if (this[index] == value) return;
+            var copy = pages[page] is { } old ? (int[])old.Clone() : new int[PageSize];
+            copy[offset] = value;
+            pages[page] = copy;
+        }
+    }
+    internal CompleteTurnHistory Fork() { var copy = new CompleteTurnHistory(); copy.CopyFrom(this); return copy; }
+    internal void CopyFrom(CompleteTurnHistory source) => source.pages.CopyTo(pages, 0);
+    internal void Clear() => Array.Clear(pages);
+    internal void Decay()
+    {
+        for (int page = 0; page < pages.Length; page++)
+        {
+            if (pages[page] is not { } old) continue;
+            var copy = new int[PageSize];
+            for (int i = 0; i < PageSize; i++) copy[i] = old[i] / 2;
+            pages[page] = copy;
+        }
+    }
+    public IEnumerator<int> GetEnumerator() { for (int i = 0; i < Count; i++) yield return this[i]; }
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
 // One game retains ordering information; helpers share only synchronized caches.
 // Call ResetEvaluation whenever the model, books or evaluation configuration changes.
 internal sealed class CompleteTurnSearchMemory
@@ -25,7 +62,7 @@ internal sealed class CompleteTurnSearchMemory
         internal object? Context;
     }
     internal Shared Cache = new();
-    internal readonly int[] History = new int[SearchHeuristics.HistorySize];
+    internal readonly CompleteTurnHistory History = new();
     internal readonly Dictionary<int, (Move?[]? First, Move?[]? Second)> Killers = new();
     internal readonly Dictionary<int, Move?[]> EvasionKillers = new();
     internal CompleteTurnResume? Resume;
@@ -45,11 +82,11 @@ internal sealed class CompleteTurnSearchMemory
         }
     }
     internal void Clear()
-    { ResetEvaluation(); Array.Clear(History); Killers.Clear(); EvasionKillers.Clear(); }
+    { ResetEvaluation(); History.Clear(); Killers.Clear(); EvasionKillers.Clear(); }
     internal CompleteTurnSearchMemory Fork()
     {
         var fork = new CompleteTurnSearchMemory { Cache = Cache, Resume = Resume };
-        History.CopyTo(fork.History, 0);
+        fork.History.CopyFrom(History);
         foreach (var pair in Killers) fork.Killers.Add(pair.Key, pair.Value);
         foreach (var pair in EvasionKillers) fork.EvasionKillers.Add(pair.Key, pair.Value);
         return fork;
@@ -154,11 +191,11 @@ internal sealed class CompleteTurnAlphaBetaSearch
     // A bounded teacher compares explicit legal complete turns. This path never
     // replaces live move selection and owns a fresh transposition/search state.
     internal static AlphaBetaResult CompareForTraining(GameState state, AlphaBetaSettings settings,
-        IReadOnlyList<Move?[]> alternatives, Func<AlphaBetaLeaf, double> evaluate, CancellationToken token)
+        IReadOnlyList<Move?[]> alternatives, Func<AlphaBetaLeaf, double> evaluate, CancellationToken token, int milliseconds = 0)
     {
         settings.Validate(); token.ThrowIfCancellationRequested();
         if (alternatives.Count < 2) throw new ArgumentException("Teacher requires multiple complete turns.");
-        return new CompleteTurnAlphaBetaSearch(state, settings, 0, evaluate, null, true, null,
+        return new CompleteTurnAlphaBetaSearch(state, settings, milliseconds, evaluate, null, true, null,
             token, true, false, new(), 0, null, null).Run(state.Clone(), null, alternatives);
     }
 
@@ -203,7 +240,7 @@ internal sealed class CompleteTurnAlphaBetaSearch
     {
         // Deferred branch-axis ordering must use the same history snapshot as
         // the physical axes even after earlier actions update the live history.
-        int[] history = (int[])memory.History.Clone();
+        var history = memory.History.Fork();
         CompleteTurnSearchGenerator? generator = null;
         long observedWork = 0;
         double Score(Move move, GameState next)
@@ -970,7 +1007,7 @@ internal sealed class CompleteTurnAlphaBetaSearch
             int index = SearchHeuristics.HistoryIndex(source.GetSquare(move.Origin), move);
             memory.History[index] += depth * depth;
             if (memory.History[index] > 20_000)
-                for (int i = 0; i < memory.History.Length; i++) memory.History[i] /= 2;
+                memory.History.Decay();
         }
         var previous = memory.Killers.GetValueOrDefault(ply);
         if (previous.First == null || ActionKey(previous.First) != action.Key)

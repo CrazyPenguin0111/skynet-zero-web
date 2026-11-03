@@ -55,6 +55,29 @@ if (!isMainThread) {
     const played = await send({command: 'engine', strength: 1});
     assert.equal(played.position.turnCount, 2);
     console.log('PASS shipped worker transport, engine errors, cancellation, restart and pending-game restoration');
+    await send({command:'import',pgn:pending.pgn});await send({command:'submit'});
+    const beforeServer=(await send({command:'state'})).position;
+    window.community={search:async()=>JSON.stringify({...played,evaluation:{...played.evaluation,searchLocation:'server'}})};
+    const remote=await send({command:'engine',pgn:beforeServer.pgn,strength:1});
+    assert.equal(remote.evaluation.searchLocation,'server');
+    assert.deepEqual((await send({command:'state'})).position.boards,played.position.boards);
+    window.community.search=async()=>null;
+    const local=await send({command:'analyze',pgn:played.position.pgn,index:2,strength:1});
+    assert.equal(local.evaluation.searchLocation,null);
+    let aborted=false;
+    window.community.search=(_,signal)=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>{
+      aborted=true;reject(new DOMException('Search aborted','AbortError'));
+    }));
+    const native=bridge.request(JSON.stringify({command:'analyze',pgn:played.position.pgn,index:2,strength:100}));
+    const canceled=assert.rejects(native,/aborted|cancelled/);bridge.cancel();await canceled;
+    assert(aborted,'Stop must abort the native request');
+    let finish;
+    window.community.search=()=>new Promise(resolve=>{finish=resolve;});
+    const stale=bridge.request(JSON.stringify({command:'engine',pgn:beforeServer.pgn,strength:1}));
+    const ignored=assert.rejects(stale,/Search cancelled/);bridge.cancel();finish(JSON.stringify(played));await ignored;
+    window.community=null;
+    assert.equal((await send({command:'state'})).position.turnCount,0,'A late native response must not mutate the restored worker');
+    console.log('PASS native result synchronization, browser fallback, native cancellation and stale-response isolation');
   } finally {
     bridge.cancel();
   }

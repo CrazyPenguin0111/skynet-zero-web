@@ -54,6 +54,7 @@ internal static class CompleteTurnStateHash
         // Preserve existing ordinary-game identities.
         if (state.PromotionMask != 0) { writer.Add(0x50524F4D); writer.Add(state.PromotionMask); }
         if (state.QueenPromotionOnly) writer.Add(0x51554545);
+        if (state.ForbidWhiteTurnOneTravel) writer.Add(0x54313557);
         if (state.DrawHistory is { } draws)
         {
             writer.Add(0x44524157);

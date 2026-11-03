@@ -11,6 +11,7 @@ internal sealed class HypercuboidGameAdapter
     [ThreadStatic] internal static bool? CastlingSliceOptimizationOverride;
     private readonly GameState original;
     private readonly HcBudget budget;
+    private readonly HashSet<Move> safeAtomicMoves = new(ReferenceEqualityComparer.Instance);
     private HcModel<Move> model = null!;
 
     internal HypercuboidGameAdapter(GameState original, HcBudget budget)
@@ -63,7 +64,9 @@ internal sealed class HypercuboidGameAdapter
                 int destinationLayer = successor.MaxTL > original.MaxTL ? successor.MaxTL :
                     successor.MinTL < original.MinTL ? successor.MinTL : move.Dest.L;
                 Board destinationBoard = successor.GetTimeline(destinationLayer)!.GetPlayableBoard();
-                moves.Add(new(move.Clone(), Square(move.Origin), Square(move.Dest), sourceBoard, destinationBoard));
+                var verified = move.Clone();
+                safeAtomicMoves.Add(verified);
+                moves.Add(new(verified, Square(move.Origin), Square(move.Dest), sourceBoard, destinationBoard));
             });
         model = HcSearch<Move>.BuildHCs(playable, moves, newTimeline, budget);
         if (PresentDomainOptimizationOverride ?? true)
@@ -195,7 +198,14 @@ internal sealed class HypercuboidGameAdapter
     {
         budget.Spend();
         successor = original.Clone();
-        foreach (Move action in HcSearch<Move>.ToAction(point, model.NewTimeline))
+        bool checkedSuccessor = false;
+        var actions = HcSearch<Move>.ToAction(point, model.NewTimeline);
+        // A single action from this adapter's private inventory has already
+        // passed royal-safety validation against this same original position.
+        // Combined actions must still be checked after every atomic move:
+        // earlier moves may expose attacks or change a later arrival board.
+        bool singleVerified = actions.Length == 1 && safeAtomicMoves.Contains(actions[0]);
+        foreach (Move action in actions)
         {
             budget.Spend();
             Move move = action.Clone();
@@ -210,7 +220,7 @@ internal sealed class HypercuboidGameAdapter
                     ? CastlingFailureSlice(point, successor, action) ?? HcSearch<Move>.ExactPointSlice(point)
                     : HcSearch<Move>.ExactPointSlice(point);
             if (successor.kingWasTaken) return HcSearch<Move>.ExactPointSlice(point);
-            if (!RoyalLegality.IsLegalAfterMove(original, action, successor, budget))
+            if (!singleVerified && !RoyalLegality.IsLegalAfterMove(original, action, successor, budget))
             {
                 Move? immutableThreat = FindDirectThreat(successor, original.Color, budget);
                 // A check introduced by an earlier atomic move cannot be fixed
@@ -219,6 +229,7 @@ internal sealed class HypercuboidGameAdapter
                 return immutableThreat == null ? HcSearch<Move>.ExactPointSlice(point) :
                     CheckSlice(point, successor, immutableThreat);
             }
+            checkedSuccessor = true;
         }
         // This is the real engine's complete-turn rule, including partial turns,
         // newly activated branches, black half-turns, and even-start variants.
@@ -226,7 +237,10 @@ internal sealed class HypercuboidGameAdapter
             return (PresentSliceOptimizationOverride ?? true) ? IncompletePresentSlice(point, successor) :
                 HcSearch<Move>.ExactPointSlice(point);
 
-        Move? threat = FindDirectThreat(successor, original.Color, budget);
+        // The final atomic move already checked this exact successor. Reading
+        // its present does not change any attack path. Empty turns still need
+        // the full safety check because they never entered the loop above.
+        Move? threat = checkedSuccessor ? null : FindDirectThreat(successor, original.Color, budget);
         return threat == null ? null : CheckSlice(point, successor, threat);
     }
 
@@ -463,7 +477,8 @@ internal sealed class HypercuboidGameAdapter
                         if (target == Board.ERRORSQUARE) break;
                         if (target != Board.EMPTYSQUARE)
                         {
-                            if (Board.GetColorBool(target) == defender && Board.IsRoyalPiece(target))
+                            if (Board.GetColorBool(target) == defender && Board.IsRoyalPiece(target) &&
+                                (!state.ForbidWhiteTurnOneTravel || defender || time != 1 || line.TEnd <= 1))
                             {
                                 var threat = new Move(new(x, y, line.TEnd, line.Layer, !defender), new(dx, dy, time, layer, !defender));
                                 if (threats == null) return threat;

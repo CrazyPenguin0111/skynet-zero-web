@@ -13,6 +13,18 @@ Play and analyze 5D chess in a timeline workspace inspired by **5D Chess With Mu
 - Review played or imported games with a clickable evaluation graph, vertical advantage bar, move badges, per-turn centipawn loss, White/Black ACPL and proven mate-in-N scores. Play another move after rewinding to create an analysis variation. The line selector preserves the original and every variation for the current session; export saves the selected line as 5DPGN.
 - Stop a search without losing the game. The last game is saved in local browser storage.
 
+## Community platform
+
+The VDS platform adds accounts and Discord linking, live player matches with server clocks, 24 separate Glicko-2 rating pools starting at 1500, public/private studies, direct messages with blocking, player profiles and tournaments. The original bot and analysis board remain available. GitHub Pages keeps running the static bot when the API is absent.
+
+- Variants: Turn Zero, Standard, Reversed Royalty, Princess, Defended Pawn and T1.5. T1.5 uses Standard's position and forbids White from traveling back to Turn 1; Black retains that travel. The rule persists in PGN via `WhiteTurnOneTravel`.
+- Time pools use base seconds plus 40 increments: bullet below 180, blitz below 480, rapid below 1500, classical otherwise. See [Lichess time categories](https://lichess.org/faq#time-controls).
+- Ratings use [Glicko-2](https://www.glicko.net/glicko/glicko2.pdf), initial deviation 350, volatility .06, tau .5. Each completed game is one rating period, with additional daily uncertainty growth during inactivity. Administrative forfeits and byes are not rated.
+- Every actual match contains exactly two games with reversed colors. Formats are round robin, Swiss, single elimination, double elimination (including final reset) and groups into knockout. Use game points or configurable match points. Knockout ties advance the higher initial seed or require an organizer decision; there is no third tie-break game. Swiss repeats are allowed only after the bounded non-repeating pairing search fails.
+- The 5D Chess League retains separate K=25 Elo, imported records and the original bot's rating bands. Administrators open and start each season. See [league source](https://github.com/CrazyPenguin0111/5D-Chess-League-Bot).
+
+[Deployment and operations](deploy/README.md) covers local development, the VDS service, Discord setup, importing the legacy database, administrator access and backups. SQLite state and credentials are excluded from Git and deployment packages. Public studies are readable by anyone; private studies are owner-only. Private tournament invitations are unlisted links, while private match play is restricted to its players and organizer. Studies store chapters, notes and PGN lines; arbitrary analysis variations can be saved as separate chapters.
+
 ## C# engine and model
 
 `engine/Vendor` contains a snapshot of the actual SkynetZero C# rules, strict royal legality, complete-turn alpha-beta search and evaluation-feature code. This is compiled for the browser; there is no JavaScript chess engine. `App.razor`, `Multiverse.razor` and their C# code implement the interface. The small JavaScript files only provide worker transport, storage, downloads, clipboard and scrolling.
@@ -27,12 +39,14 @@ Browser adaptations are recorded in [source-manifest.json](engine/source-manifes
 |---|---:|---:|---:|
 | 1 | 1 | 96 | 1 second |
 | 34 (default) | 2 | 512 | 3 seconds |
-| 67 | 6 | 8,192 | 15 seconds |
-| 100 | 64 | 65,536 | 60 seconds |
+| 67 | 6 | 32,768 | 8 seconds |
+| 100 | 64 | 2,000,000 | 16 seconds |
 
 Every intermediate level has its own smoothly increasing node and time budgets. Play and analysis each have a slider. Engine games record the highest played strength in a `SkynetStrength` PGN tag; analysis cannot use a weaker budget. Older engine exports without this tag use maximum analysis. The achieved search depth is shown after each engine move. These are search budgets, not Elo ratings or strict wall-clock guarantees. A complex complete-turn generation or legality check can exceed the time budget. **Stop** terminates the worker and restores the game. If no search depth completes, the UI labels the score as a static evaluation and any playable fallback explicitly.
 
 Depth 64 is a ceiling, not a claim of completed search. The shipped v11 model was trained directly through self-play. It is distinct from the older [small evaluator distillation experiment](tools/SmallModelStudy/README.md), whose candidate weights and measured results remain included separately.
+
+Release builds compile the engine ahead of time to WebAssembly. Search shares immutable move-ordering history pages, reuses validated atomic-move safety, and continues repeated analysis of the identical root. The VDS additionally runs native bot/analysis searches for signed-in players. A busy server or guest session uses the browser engine. Native results identify themselves as **Server**; the worker synchronizes the resulting PGN before further local moves. Search PGNs are processed in memory and are not saved by the search endpoint. See [measured search performance](tools/SearchBenchmark/README.md).
 
 ## Opening repertoire
 
@@ -52,7 +66,7 @@ Review changes and deliberately update the bundle checksum afterward. Normal bui
 
 ## Analysis and notation
 
-Positive scores favor White. Engine value units are normalized using the shared evaluation-term reference active-pawn coefficient: **484.2 engine units = 100 centipawns**. Scores are shown in pawn units (`+1.25`) and move losses in centipawns (`125 cp`). Loss compares the engine's best and played **complete multiverse turns from the same root and completed search depth**, floored at zero. A searched best turn has zero loss even if the next position's independent search changes its evaluation. Comparing a different played turn may require a second search with the selected budget; incomplete comparisons are unscored. Values are clipped to ±1,000 cp for loss calculation. ACPL is the arithmetic mean of scored turns for that side.
+Positive scores favor White. Engine value units are normalized using the shared evaluation-term reference active-pawn coefficient: **484.2 engine units = 100 centipawns**. Scores are shown in pawn units (`+1.25`) and move losses in centipawns (`125 cp`). Loss compares the engine's best and played **complete multiverse turns from the same root and completed search depth**, floored at zero. A searched best turn has zero loss even if the next position's independent search changes its evaluation. Comparing a different played turn uses only the time remaining in the selected per-position budget; incomplete comparisons are unscored. Values are clipped to ±1,000 cp for loss calculation. ACPL is the arithmetic mean of scored turns for that side.
 
 Badges include **Book, Best, Brilliant, Excellent, Good, Inaccuracy, Mistake and Blunder**. Best matches the searched turn or a tied alternative. Brilliant additionally requires a spatial piece sacrifice verified by native static exchange, completed depth 3 on both positions, and a preserved evaluation; temporal and multi-board sacrifices are not guessed. Numerical thresholds are 50 cp for Inaccuracy, 100 cp for Mistake and 300 cp for Blunder. These are SkynetZero classifications, not Chess.com's proprietary algorithm.
 
@@ -68,11 +82,12 @@ Export writes explicit initial 5DFEN boards and mainline moves. Comments, origin
 
 ## Build and run
 
-Requires the **.NET 10 SDK**. Node.js 24 is used only for integration tests; Python 3 is used for the integrity check and optional local static server. No npm packages, CUDA, TorchSharp, original checkout, or WebAssembly workload are required for the normal build.
+Requires the **.NET 10 SDK** and its **wasm-tools** workload for optimized release publishing. Node.js 24 is used only for integration tests; Python 3 is used for the integrity check and optional local static server. CUDA, TorchSharp and the original checkout are not required.
 
 ```sh
 python3 tools/verify-bundle.py
 dotnet run --project tests/EngineTests.csproj -c Release
+dotnet workload install wasm-tools
 dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
 node tools/wasm-smoke.mjs
 node tools/worker-smoke.mjs
@@ -80,7 +95,7 @@ node tools/browser-controls.mjs
 python3 -m http.server 4183 --directory artifacts/publish/wwwroot
 ```
 
-Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. Game calculation and analysis stay local after assets load. The app has no analytics or game-upload endpoint.
+Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. On static hosting, game calculation and analysis stay local after assets load. Signed-in VDS users send the current PGN for native search when available. The static bot has no analytics. Multiplayer games and explicitly saved studies are stored by the VDS server. For a quick interpreter-only development publish, pass `-p:RunAOTCompilation=false`; production uses AOT.
 
 `tests/Program.cs` covers model/feature parity, strict moves, pending undo, time travel, multi-board turns, import/export, promotion restrictions, mate proof and loss orientation. `tests/UiChecks.cs` renders real Razor components. The Node integration tests execute the **published browser WebAssembly**, including opening-book play, the actual worker bridge and cancellation. A controlled-clock DOM fixture checks continuous diagonal panning, display-rate independence, keyboard release/blur/dialog guards and pointer-centered wheel zoom. They do not substitute for an interactive visual browser check.
 

@@ -13,16 +13,27 @@ public sealed class GameSession
     private readonly List<BranchView> branches=[];
     private readonly PortableModel model;
     private readonly SacrificeTable.Snapshot evaluationTables;
+    private CompleteTurnSearchMemory searchMemory = new();
+    private SacrificeTable.RootTravelContext? searchTravel;
+    private string? searchKey;
+    private int searchLevel;
     private string result="*", whiteName="You",blackName="SkynetZero";
     private int engineStrength;
     private CheckAndMateResult? liveStatus;
     public GameSession(PortableModel model){this.model=model;evaluationTables=SacrificeTable.CaptureSnapshot();New();}
     public void New(string? side=null,string? variant=null) {
-        string board=variant=="standard"?"standard":"standard-t0";
-        initial=FENParser.ShadSTDGSMFromString($"[Board \"{board}\"]")!.Clone();
+        string board=variant??"standard-t0";
+        Import(VariantCatalog.StartingPgn(board));
+        initial=initial.Clone();
         initial.QueenPromotionOnly=false;DrawRules.Enable(initial);live=initial.Clone();
         positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();result="*";liveStatus=null;
         whiteName=side=="black"?"SkynetZero":"You";blackName=side=="black"?"You":"SkynetZero";engineStrength=0;
+    }
+    public void SetPlayers(string white,string black){whiteName=white;blackName=black;engineStrength=0;}
+    public int SnapshotPendingCount()=>pending.Count;
+    public void End(string outcome){
+        if(outcome is not ("1-0" or "0-1" or "1/2-1/2"))throw new InvalidDataException("Invalid result.");
+        while(pending.Count>0)Undo();result=outcome;
     }
     public void Restart(){
         live=initial.Clone();positions.Clear();positions.Add(initial.Clone());turns.Clear();pending.Clear();pendingUndo.Clear();branches.Clear();
@@ -117,6 +128,7 @@ public sealed class GameSession
         string Safe(string s)=>s.Replace('"','\'').Replace('\n',' ').Replace('\r',' ');
         var b=new StringBuilder($"[Event \"SkynetZero local game\"]\n[Site \"SkynetZero Web\"]\n[White \"{Safe(whiteName)}\"]\n[Black \"{Safe(blackName)}\"]\n[Result \"{result}\"]\n[Board \"custom\"]\n[Size \"{initial.Width}x{initial.Height}\"]\n[Color \"{(initial.Color?"white":"black")}\"]\n");
         b.AppendLine("[Mode \"5D\"]");
+        if(initial.ForbidWhiteTurnOneTravel)b.AppendLine("[WhiteTurnOneTravel \"forbidden\"]");
         if(engineStrength>0)b.AppendLine($"[SkynetStrength \"{engineStrength}\"]");
         string promotions=string.Join(' ',Enumerable.Range(2,11).Where(t=>t!=7&&initial.PromotionAllowed(t)).Select(t=>Board.PieceChars[t]));
         b.AppendLine($"[Promotions \"{promotions}\"]");
@@ -152,6 +164,10 @@ public sealed class GameSession
         if(parsed.Width is <1 or >8||parsed.Height is <1 or >8||parsed.Multiverse.Count>64)throw new InvalidDataException("Use boards up to 8×8 and at most 64 initial timelines.");
         if(!tags.ContainsKey("Color"))parsed.Color=parsed.CalcPresent();parsed.StartPresent=parsed.Present;
         initial=parsed.Clone();initial.QueenPromotionOnly=false;
+        if(tags.TryGetValue("WhiteTurnOneTravel",out var travel)){
+            if(travel is not ("forbidden" or "allowed"))throw new InvalidDataException("WhiteTurnOneTravel must be forbidden or allowed.");
+            initial.ForbidWhiteTurnOneTravel=travel=="forbidden";
+        }
         if(tags.TryGetValue("Promotions",out var allowed)) {
             int mask=0;
             foreach(char piece in allowed.ToUpperInvariant().Where(char.IsLetter)) {
@@ -195,6 +211,7 @@ public sealed class GameSession
         if(depth!=0)throw new InvalidDataException("Unclosed 5DPGN comment.");return b.ToString();
     }
     public Evaluation Analyze(int index,int strength) {
+        var timer=System.Diagnostics.Stopwatch.StartNew();
         int i=Math.Clamp(index,0,positions.Count-1);var search=Search(positions[i],i,strength);
         if(i>=turns.Count)return search.Evaluation;
         var turn=turns[i];
@@ -206,11 +223,13 @@ public sealed class GameSession
         if(matches)evidence=evidence with { Loss=0,ComparisonDepth=search.Evaluation.Depth,
             MateVerdict=search.Evaluation.Mate is not null?search.Evaluation.Winner==turn.White?"Forced mate":"Mate sequence":null };
         else if(search.Result is {CompletedDepth:>0} found)
-            evidence=ComparePlayed(positions[i],turn,found,strength,sacrifice);
+            evidence=ComparePlayed(positions[i],turn,found,strength,sacrifice,
+                Math.Max(0,Strength.FromLevel(strength).Milliseconds-(int)timer.ElapsedMilliseconds));
         return search.Evaluation with { PlayedTurn=evidence };
     }
-    private PlayedTurnEvidence ComparePlayed(GameState root,TurnView turn,AlphaBetaResult found,int strength,int sacrifice){
+    private PlayedTurnEvidence ComparePlayed(GameState root,TurnView turn,AlphaBetaResult found,int strength,int sacrifice,int milliseconds){
         var unscored=new PlayedTurnEvidence(false,sacrifice);
+        if(milliseconds<=0)return unscored;
         var played=new List<Move?>();var replay=root.Clone();
         foreach(var view in turn.Moves){var move=FiveDProtocol.ParseMove(replay,view.Id);played.Add(move);
             if(!replay.MakeMove(move.Clone(),true))throw new InvalidDataException("Review turn failed legal replay.");}
@@ -224,11 +243,11 @@ public sealed class GameSession
         double Evaluate(AlphaBetaLeaf leaf){
             // Browser workers can be single-threaded: a wall-clock check in the
             // callback works even when timer callbacks cannot run during search.
-            if(timer.ElapsedMilliseconds>=level.Milliseconds)throw new OperationCanceledException();
+            if(timer.ElapsedMilliseconds>=milliseconds)throw new OperationCanceledException();
             return model.Evaluate(leaf.State,root.Color);
         }
         AlphaBetaResult comparison;
-        try{comparison=CompleteTurnAlphaBetaSearch.CompareForTraining(root,settings,[found.CompleteTurnMoves,played.ToArray()],Evaluate,default);}
+        try{comparison=CompleteTurnAlphaBetaSearch.CompareForTraining(root,settings,[found.CompleteTurnMoves,played.ToArray()],Evaluate,default,milliseconds);}
         catch(OperationCanceledException){return unscored;}
         if(comparison.TrainingDepth<found.CompletedDepth||comparison.TrainingTurns.Length!=2)return unscored;
         string Key(IEnumerable<Move?> moves)=>string.Join('|',moves.Select(CompleteTurnCandidates.ActionKey));
@@ -273,16 +292,26 @@ public sealed class GameSession
         if(pending.Count>0)Submit();engineStrength=Math.Max(engineStrength,Strength.FromLevel(strength).Level);return search.Evaluation;
     }
     private (AlphaBetaResult? Result,Evaluation Evaluation) Search(GameState source,int index,int strength) {
+        var timer=System.Diagnostics.Stopwatch.StartNew();
         var state=source.Clone();bool white=state.Color;var level=Strength.FromLevel(strength);
         // Match native frozen-arena evaluation: the same tables and root travel
         // routes apply throughout a search, instead of treating every leaf as
         // a new root and awarding new travel opportunities inconsistently.
         using var tables=SacrificeTable.UseSnapshot(evaluationTables);
-        using var travel=SacrificeTable.UseRootTravel(SacrificeTable.CaptureRootTravel(state));
+        string key=CompleteTurnStateHash.Compute(state);
+        // Reuse work only for the identical full history, variant and frozen
+        // evaluator. Lowering strength starts afresh so a weak bot cannot use
+        // a previous stronger search. Retain just one root to bound memory.
+        if(key!=searchKey||level.Level!=searchLevel&&!(level.Level>searchLevel&&searchMemory.Resume?.Complete==true)){
+            searchMemory=new();searchKey=key;searchTravel=SacrificeTable.CaptureRootTravel(state);
+        }
+        searchLevel=level.Level;
+        using var travel=SacrificeTable.UseRootTravel(searchTravel!);
         var proof=CheckAndMate.Analyze(state,new(){MaxWork=100000,MaxMilliseconds=250});
         if(proof.IsTerminal)return(null,new(index,proof.WinnerWhite==null?0:null,proof.WinnerWhite!=null?0:null,proof.WinnerWhite,0,0,0,false,"",proof.Status.ToString()));
         var settings=new AlphaBetaSettings {CompleteTurnDepth=level.Depth,MaxNodes=level.Nodes,Threads=1,MaxActionsPerTurn=32,TranspositionEntries=4096,QuiescenceTurns=1};
-        var found=CompleteTurnAlphaBetaSearch.Choose(state,settings,level.Milliseconds,evaluate:leaf=>model.Evaluate(leaf.State,white),evaluatorUnits:true);
+        var found=CompleteTurnAlphaBetaSearch.Choose(state,settings,Math.Max(1,level.Milliseconds-(int)timer.ElapsedMilliseconds),
+            evaluate:leaf=>model.Evaluate(leaf.State,white),evaluatorUnits:true,memory:searchMemory);
         int? mate=found.ProvenMateDistance is {} d?(Math.Abs(d)+1)/2:null;
         bool? winner=mate!=null?(found.SourceScore>0?white:!white):null;
         // Internal units are normalized to the v10 active-pawn coefficient: 100 cp = one reference pawn.

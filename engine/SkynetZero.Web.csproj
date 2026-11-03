@@ -7,12 +7,19 @@
     <NoWarn>$(NoWarn);CA1416;CS0649</NoWarn>
     <RootNamespace>SkynetZero.Web</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <WasmBuildNative>false</WasmBuildNative>
+    <RunAOTCompilation Condition="'$(RunAOTCompilation)' == '' and '$(Configuration)' == 'Release'">true</RunAOTCompilation>
+    <RunAOTCompilation Condition="'$(RunAOTCompilation)' == ''">false</RunAOTCompilation>
+    <WasmBuildNative>$(RunAOTCompilation)</WasmBuildNative>
+    <WasmStripILAfterAOT>false</WasmStripILAfterAOT>
     <WasmEnableSIMD>true</WasmEnableSIMD>
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
-    <PublishTrimmed>false</PublishTrimmed>
+    <PublishTrimmed Condition="'$(RunAOTCompilation)' == 'true'">true</PublishTrimmed>
+    <PublishTrimmed Condition="'$(RunAOTCompilation)' != 'true'">false</PublishTrimmed>
   </PropertyGroup>
+  <ItemGroup Condition="'$(EngineBenchmark)' == 'true'">
+    <Compile Include="../tools/SearchBenchmark/Benchmark.cs" />
+  </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources/openings.json" LogicalName="SkynetZero.Openings.json" />
     <EmbeddedResource Include="Resources/evaluation-tables.bin" LogicalName="SkynetZero.LearnedTables.bin" />

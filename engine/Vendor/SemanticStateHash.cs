@@ -64,6 +64,7 @@ internal static class SemanticStateHash
         writer.Add(state.MinTL, '|'); writer.Add(state.MaxTL, '|');
         writer.Add(state.MinActiveTL, '|'); writer.Add(state.MaxActiveTL, '|'); writer.Add(state.TLHandicap, '|');
         writer.Add(state.kingWasTaken, '|'); writer.Add(state.kingWasTakenByColor, '|');
+        if (state.ForbidWhiteTurnOneTravel) writer.Add("T1.5|"u8);
         foreach (var line in state.Multiverse)
         {
             writer.Add(line.Layer, ':'); writer.Add(line.TStart, ':'); writer.Add(line.TEnd, ':');

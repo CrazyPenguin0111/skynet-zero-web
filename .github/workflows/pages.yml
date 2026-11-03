@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v6
@@ -30,14 +30,38 @@ jobs:
         run: python3 tools/verify-bundle.py
       - name: Test engine, model parity, notation and Razor rendering
         run: dotnet run --project tests/EngineTests.csproj -c Release
+      - name: Test accounts, privacy, ratings, clocks, league import and tournaments
+        run: dotnet run --project platform-tests/PlatformTests.csproj -c Release
       - name: Publish static WebAssembly app
-        run: dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
+        run: |
+          dotnet workload install wasm-tools
+          dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
       - name: Run the published WebAssembly engine
         run: node tools/wasm-smoke.mjs
       - name: Test the shipped worker and cancellation
         run: node tools/worker-smoke.mjs
       - name: Test smooth navigation and pointer-centered zoom
         run: node tools/browser-controls.mjs
+      - name: Install community browser test runner
+        run: |
+          npm install --prefix /tmp/skynet-browser-tests playwright@1.58.2
+          /tmp/skynet-browser-tests/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test the community in two browser sessions
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5088
+          DataPath: /tmp/skynet-community-ci
+          PLAYWRIGHT_MODULE: /tmp/skynet-browser-tests/node_modules/playwright/index.mjs
+        run: |
+          export ASPNETCORE_WEBROOT="$PWD/artifacts/publish/wwwroot"
+          dotnet run --no-build --project server/SkynetZero.Server.csproj -c Release > /tmp/skynet-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5088/health; then break; fi
+            sleep 1
+          done
+          node tools/community-browser.mjs
       - name: Configure Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/configure-pages@v5

@@ -1,0 +1,439 @@
+{
+  "date": "2026-11-02",
+  "machine": "Intel Core i9-14900KF, 32 logical CPUs, Linux",
+  "load": "An existing training process remained running. These are individual measurements, not a cross-device guarantee.",
+  "fixtureFile": "tools/search-positions.json",
+  "targetDepth": 10,
+  "milliseconds": 16000,
+  "nodes": 2000000,
+  "transpositionEntries": 4096,
+  "modelSha256": "7eaaaf6189feae4db45ac87f84f9288e82f45ba1ebcb29b1f93962859ffe5570",
+  "browserBefore": [
+    {
+      "Name": "warmup",
+      "Depth": 1,
+      "TargetNodes": 64,
+      "Milliseconds": 0,
+      "CompletedDepth": 1,
+      "Nodes": 24,
+      "Leaves": 23,
+      "TableHits": 0,
+      "GenerationWork": 4179,
+      "SourceScore": 960,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 191.2684,
+      "AllocatedBytes": 1610616,
+      "Evaluations": 20,
+      "EncodingMs": 26.934176,
+      "InferenceMs": 4.573648,
+      "Turn": [
+        "(0T1)g1f3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "turn-zero",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 5,
+      "Nodes": 11165,
+      "Leaves": 10679,
+      "TableHits": 281,
+      "GenerationWork": 4968109,
+      "SourceScore": 1243,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16003.5504,
+      "AllocatedBytes": 554730200,
+      "Evaluations": 8776,
+      "EncodingMs": 2131.003645,
+      "InferenceMs": 291.99432,
+      "Turn": [
+        "(0T1)d2d4",
+        "submit"
+      ]
+    },
+    {
+      "Name": "four-plies",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 5,
+      "Nodes": 8621,
+      "Leaves": 8209,
+      "TableHits": 127,
+      "GenerationWork": 5484024,
+      "SourceScore": 264,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16006.1458,
+      "AllocatedBytes": 495343160,
+      "Evaluations": 6076,
+      "EncodingMs": 1474.11693,
+      "InferenceMs": 221.419988,
+      "Turn": [
+        "(0T3)f3e5",
+        "submit"
+      ]
+    },
+    {
+      "Name": "branched",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 4,
+      "Nodes": 4173,
+      "Leaves": 3222,
+      "TableHits": 90,
+      "GenerationWork": 9998192,
+      "SourceScore": 4919,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16001.7746,
+      "AllocatedBytes": 645539680,
+      "Evaluations": 2463,
+      "EncodingMs": 552.113598,
+      "InferenceMs": 67.268348,
+      "Turn": [
+        "(1T1)e7e6",
+        "submit"
+      ]
+    }
+  ],
+  "browserAfter": [
+    {
+      "Name": "warmup",
+      "Depth": 1,
+      "TargetNodes": 64,
+      "Milliseconds": 0,
+      "CompletedDepth": 1,
+      "Nodes": 24,
+      "Leaves": 23,
+      "TableHits": 0,
+      "GenerationWork": 1559,
+      "SourceScore": 960,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 112.1215,
+      "AllocatedBytes": 1042848,
+      "Evaluations": 20,
+      "EncodingMs": 15.437741,
+      "InferenceMs": 0.826866,
+      "Turn": [
+        "(0T1)g1f3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "turn-zero",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 7,
+      "Nodes": 49775,
+      "Leaves": 47462,
+      "TableHits": 1181,
+      "GenerationWork": 19437812,
+      "SourceScore": 894,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16003.3096,
+      "AllocatedBytes": 2230206656,
+      "Evaluations": 41854,
+      "EncodingMs": 1401.549405,
+      "InferenceMs": 278.432479,
+      "Turn": [
+        "(0T1)d2d4",
+        "submit"
+      ]
+    },
+    {
+      "Name": "four-plies",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 7,
+      "Nodes": 39577,
+      "Leaves": 37987,
+      "TableHits": 447,
+      "GenerationWork": 21617040,
+      "SourceScore": 561,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16003.6469,
+      "AllocatedBytes": 1997816520,
+      "Evaluations": 32662,
+      "EncodingMs": 1116.06916,
+      "InferenceMs": 216.152775,
+      "Turn": [
+        "(0T3)c1f4",
+        "submit"
+      ]
+    },
+    {
+      "Name": "branched",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 4,
+      "Nodes": 11309,
+      "Leaves": 8182,
+      "TableHits": 91,
+      "GenerationWork": 32492130,
+      "SourceScore": 4118,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16002.1789,
+      "AllocatedBytes": 1838157712,
+      "Evaluations": 6683,
+      "EncodingMs": 326.036572,
+      "InferenceMs": 51.662966,
+      "Turn": [
+        "(1T1)e7e6",
+        "submit"
+      ]
+    }
+  ],
+  "nativeBefore": [
+    {
+      "Name": "warmup",
+      "Depth": 1,
+      "TargetNodes": 64,
+      "Milliseconds": 0,
+      "CompletedDepth": 1,
+      "Nodes": 24,
+      "Leaves": 23,
+      "TableHits": 0,
+      "GenerationWork": 4179,
+      "SourceScore": 960,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 95.3983,
+      "AllocatedBytes": 1321824,
+      "Evaluations": 20,
+      "EncodingMs": 19.755901,
+      "InferenceMs": 1.333307,
+      "Turn": [
+        "(0T1)g1f3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "turn-zero",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 10,
+      "Nodes": 162826,
+      "Leaves": 157079,
+      "TableHits": 1826,
+      "GenerationWork": 97494641,
+      "SourceScore": 806,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 13350.4866,
+      "AllocatedBytes": 8224629584,
+      "Evaluations": 142671,
+      "EncodingMs": 2084.460545,
+      "InferenceMs": 455.357055,
+      "Turn": [
+        "(0T1)g1f3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "four-plies",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 9,
+      "Nodes": 189145,
+      "Leaves": 182304,
+      "TableHits": 1388,
+      "GenerationWork": 138682841,
+      "SourceScore": 844,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16000.4836,
+      "AllocatedBytes": 10181439920,
+      "Evaluations": 163363,
+      "EncodingMs": 2405.519022,
+      "InferenceMs": 463.678436,
+      "Turn": [
+        "(0T3)b1c3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "branched",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 5,
+      "Nodes": 57230,
+      "Leaves": 39422,
+      "TableHits": 407,
+      "GenerationWork": 199530346,
+      "SourceScore": 5587,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16000.2736,
+      "AllocatedBytes": 11719113072,
+      "Evaluations": 36262,
+      "EncodingMs": 786.355422,
+      "InferenceMs": 126.794885,
+      "Turn": [
+        "(1T1)g8f6",
+        "submit"
+      ]
+    }
+  ],
+  "nativeAfter": [
+    {
+      "Name": "warmup",
+      "Depth": 1,
+      "TargetNodes": 64,
+      "Milliseconds": 0,
+      "CompletedDepth": 1,
+      "Nodes": 24,
+      "Leaves": 23,
+      "TableHits": 0,
+      "GenerationWork": 1559,
+      "SourceScore": 960,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 106.3696,
+      "AllocatedBytes": 803240,
+      "Evaluations": 20,
+      "EncodingMs": 27.242869,
+      "InferenceMs": 2.083532,
+      "Turn": [
+        "(0T1)g1f3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "turn-zero",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 10,
+      "Nodes": 162826,
+      "Leaves": 157079,
+      "TableHits": 1826,
+      "GenerationWork": 71819266,
+      "SourceScore": 806,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 10382.7066,
+      "AllocatedBytes": 5445686864,
+      "Evaluations": 142671,
+      "EncodingMs": 1820.695843,
+      "InferenceMs": 440.268434,
+      "Turn": [
+        "(0T1)g1f3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "four-plies",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 10,
+      "Nodes": 212476,
+      "Leaves": 204995,
+      "TableHits": 1418,
+      "GenerationWork": 120221716,
+      "SourceScore": 879,
+      "StopReason": "CompletedDepth",
+      "ElapsedMs": 13977.2535,
+      "AllocatedBytes": 7736891280,
+      "Evaluations": 185005,
+      "EncodingMs": 2367.655838,
+      "InferenceMs": 485.906944,
+      "Turn": [
+        "(0T3)b1c3",
+        "submit"
+      ]
+    },
+    {
+      "Name": "branched",
+      "Depth": 10,
+      "TargetNodes": 2000000,
+      "Milliseconds": 16000,
+      "CompletedDepth": 5,
+      "Nodes": 57816,
+      "Leaves": 39770,
+      "TableHits": 414,
+      "GenerationWork": 194193368,
+      "SourceScore": 5587,
+      "StopReason": "TimeLimit",
+      "ElapsedMs": 16000.568,
+      "AllocatedBytes": 7241828392,
+      "Evaluations": 36608,
+      "EncodingMs": 795.448277,
+      "InferenceMs": 132.668321,
+      "Turn": [
+        "(1T1)g8f6",
+        "submit"
+      ]
+    }
+  ],
+  "productionNativeWorker": [
+    {
+      "name": "turn-zero",
+      "externalMs": 16292,
+      "evaluation": {
+        "index": 0,
+        "centipawns": 116,
+        "mate": null,
+        "winner": null,
+        "depth": 10,
+        "nodes": 223017,
+        "seconds": 15.9933612,
+        "interrupted": true,
+        "bestTurn": "(0T1)Ng1f3",
+        "stopReason": "TimeLimit",
+        "staticOnly": false,
+        "bookName": null,
+        "playedTurn": null,
+        "searchLocation": "server",
+        "display": "+1.16",
+        "explanation": "Depth 10 \u00b7 223,017 nodes \u00b7 16.0s \u00b7 Server"
+      }
+    },
+    {
+      "name": "four-plies",
+      "externalMs": 16266,
+      "evaluation": {
+        "index": 4,
+        "centipawns": 174,
+        "mate": null,
+        "winner": null,
+        "depth": 9,
+        "nodes": 192473,
+        "seconds": 15.98303,
+        "interrupted": true,
+        "bestTurn": "(0T3)Nb1c3",
+        "stopReason": "TimeLimit",
+        "staticOnly": false,
+        "bookName": null,
+        "playedTurn": null,
+        "searchLocation": "server",
+        "display": "+1.74",
+        "explanation": "Depth 9 \u00b7 192,473 nodes \u00b7 16.0s \u00b7 Server"
+      }
+    },
+    {
+      "name": "branched",
+      "externalMs": 16313,
+      "evaluation": {
+        "index": 3,
+        "centipawns": -1154,
+        "mate": null,
+        "winner": null,
+        "depth": 5,
+        "nodes": 57740,
+        "seconds": 15.9822901,
+        "interrupted": true,
+        "bestTurn": "(1T1)Ng8f6",
+        "stopReason": "TimeLimit",
+        "staticOnly": false,
+        "bookName": null,
+        "playedTurn": null,
+        "searchLocation": "server",
+        "display": "\u221211.54",
+        "explanation": "Depth 5 \u00b7 57,740 nodes \u00b7 16.0s \u00b7 Server"
+      }
+    }
+  ]
+}

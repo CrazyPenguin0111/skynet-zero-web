@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks><NoWarn>$(NoWarn);CS0649</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../engine/Vendor/*.cs;../engine/Globals.cs;../engine/PortableModel.cs;../engine/Contracts.cs;../engine/CommunityContracts.cs;../engine/VariantCatalog.cs;../engine/GameSession.cs;../engine/OpeningRepertoire.cs" />
+    <EmbeddedResource Include="../engine/Model/weights.json" LogicalName="SkynetZero.Model.json" />
+    <EmbeddedResource Include="../engine/Resources/openings.json" LogicalName="SkynetZero.Openings.json" />
+    <EmbeddedResource Include="../engine/Resources/evaluation-tables.bin" LogicalName="SkynetZero.LearnedTables.bin" />
+    <EmbeddedResource Include="../engine/Resources/fsac_table.bin" LogicalName="SkynetZero.SacrificeTable.bin" />
+  </ItemGroup>
+</Project>

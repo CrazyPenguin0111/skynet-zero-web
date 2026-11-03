@@ -1,7 +1,8 @@
-// The only JS responsibilities are worker transport and browser capabilities.
+// Engine transport and browser capabilities. Rules and inference remain C#.
 window.skynet=(()=>{
  let worker,keyboard,keyUp,wheel,blur,visibility,pointerDown,pointerMove,pointerUp,contextMenu,drag,dragFrame=0,frame=0,lastFrame=0,vx=0,vy=0,zoomAnchor;
  let wheelFrame=0,wheelDelta=0,wheelPoint,zoomBusy=false,serial=0;
+ let nativeAbort,cancelGeneration=0;
  const held=new Set(),pending=new Map();
  const direction=key=>({arrowup:'w',arrowleft:'a',arrowdown:'s',arrowright:'d'}[key]||key);
  const editable=target=>target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"]');
@@ -48,9 +49,31 @@ window.skynet=(()=>{
   if(held.size||Math.hypot(vx,vy)>.5)frame=requestAnimationFrame(panFrame);else stopPan();
  };
  const start=()=>{worker=new Worker(new URL('engine-worker.js',document.baseURI),{type:'module'});worker.onmessage=({data})=>{const task=pending.get(data.id);if(!task)return;pending.delete(data.id);data.error?task.reject(new Error(data.error)):task.resolve(data.result);};worker.onerror=e=>{for(const task of pending.values())task.reject(new Error(e.message||'Engine worker failed to load.'));pending.clear();worker?.terminate();worker=null;};};
+ const localRequest=json=>{if(!worker)start();return new Promise((resolve,reject)=>{const id=++serial;pending.set(id,{resolve,reject});worker.postMessage({id,json});});};
  return {
-  request(json){if(!worker)start();return new Promise((resolve,reject)=>{const id=++serial;pending.set(id,{resolve,reject});worker.postMessage({id,json});});},
-  cancel(){worker?.terminate();worker=null;for(const task of pending.values())task.reject(new Error('Search cancelled.'));pending.clear();},
+  async request(json){
+   const request=JSON.parse(json),generation=cancelGeneration;
+   if(['engine','analyze'].includes(request.command)&&request.pgn&&request.pgn.length<=64000&&window.community?.search){
+    const controller=new AbortController();nativeAbort=controller;
+    try{
+     let response;
+     try{response=await window.community.search(json,controller.signal);}
+     catch(error){if(error.name!=='TypeError')throw error;} // Offline network: local search remains available.
+     if(generation!==cancelGeneration)throw new Error('Search cancelled.');
+     if(response){
+      const reply=JSON.parse(response);
+      if(reply.position){
+       const synchronized=JSON.parse(await localRequest(JSON.stringify({command:'import',pgn:reply.position.pgn})));
+       if(synchronized.error)throw new Error(synchronized.error);
+      }
+      return response;
+     }
+    }finally{if(nativeAbort===controller)nativeAbort=null;}
+   }
+   if(generation!==cancelGeneration)throw new Error('Search cancelled.');
+   return localRequest(json);
+  },
+  cancel(){cancelGeneration++;nativeAbort?.abort();nativeAbort=null;worker?.terminate();worker=null;for(const task of pending.values())task.reject(new Error('Search cancelled.'));pending.clear();},
   save(pgn){try{localStorage.setItem('skynet-zero-game',pgn);}catch{}},
   restore(){try{return localStorage.getItem('skynet-zero-game');}catch{return null;}},
   download(name,text){const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},

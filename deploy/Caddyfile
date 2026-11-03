@@ -1,0 +1,7 @@
+# Add this site block to the existing configuration; preserve other hosted sites.
+play.5dchess.net {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:5080 {
+        flush_interval -1
+    }
+}

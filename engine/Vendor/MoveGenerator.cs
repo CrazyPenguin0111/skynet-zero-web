@@ -942,7 +942,7 @@ namespace SkynetZero
 			return moves;
 		}
 
-		private readonly record struct PendingAttack(int X, int Y, int Time, int Layer, CoordFive Vector, bool Rider);
+		private readonly record struct PendingAttack(int X, int Y, int Time, int Layer, CoordFive Vector, bool Rider, int OriginTime);
 
 		// Valid only for append-only successors while the original position remains unchanged.
 		internal sealed class CurrentThreatProbe
@@ -1014,7 +1014,8 @@ namespace SkynetZero
 									if (target == Board.ERRORSQUARE) break;
 								if (target != EMPTYSQUARE)
 								{
-									if (Board.GetColorBool(target) == defender && PieceIsRoyal(target)) return true;
+									if (Board.GetColorBool(target) == defender && PieceIsRoyal(target) &&
+                                (!successor.ForbidWhiteTurnOneTravel || defender || time != 1 || attack.OriginTime <= 1)) return true;
 									break;
 								}
 								if (!attack.Rider) break;
@@ -1090,13 +1091,14 @@ namespace SkynetZero
 											pending = new List<PendingAttack>();
 											frontier.Add((layer, time), pending);
 										}
-										pending.Add(new PendingAttack(dx, dy, time, layer, vector, rider));
+										pending.Add(new PendingAttack(dx, dy, time, layer, vector, rider, t.TEnd));
 									}
 									break;
 								}
 								if (target != EMPTYSQUARE)
 								{
-									if (Board.GetColorBool(target) == defender && PieceIsRoyal(target))
+									if (Board.GetColorBool(target) == defender && PieceIsRoyal(target) &&
+                                        (!g.ForbidWhiteTurnOneTravel || defender || time != 1 || t.TEnd <= 1))
 									{
 										if (moves == null) return true;
 										moves.Add(new Move(new CoordFive(x, y, t.TEnd, i, !defender),
@@ -1139,7 +1141,8 @@ namespace SkynetZero
 						if (target == Board.ERRORSQUARE) break;
 						if (target != EMPTYSQUARE)
 						{
-							if (Board.GetColorBool(target) == defender && PieceIsRoyal(target)) return true;
+							if (Board.GetColorBool(target) == defender && PieceIsRoyal(target) &&
+                                (!successor.ForbidWhiteTurnOneTravel || defender || time != 1 || attack.OriginTime <= 1)) return true;
 							break;
 						}
 						if (!attack.Rider) break;
@@ -1246,6 +1249,7 @@ namespace SkynetZero
 						foreach (CoordFive dest in moveLocations)
 						{
 							var move = new Move(srcLocation.Clone(), dest);
+                            if (!g.VariantAllows(move)) continue;
 							// Movement-only candidates; production search also applies RoyalLegality.
 							// Castling cannot start in, pass through, or finish in check.
 							if (!IsCastlingMove(piece, move) || CanCastle(g, move)) moves.Add(move);
