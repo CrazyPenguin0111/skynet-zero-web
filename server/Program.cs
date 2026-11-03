@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SkynetZero.Server;
 
+if(args is ["--engine-worker"]){await NativeSearch.Worker();return;}
+
 var builder=WebApplication.CreateBuilder(args);
 string data=Path.GetFullPath(builder.Configuration["DataPath"]??Path.Combine(builder.Environment.ContentRootPath,"data"));Directory.CreateDirectory(data);
 builder.Services.AddDbContext<PlatformDb>(o=>o.UseSqlite($"Data Source={Path.Combine(data,"platform.db")};Default Timeout=15"));
@@ -57,7 +59,9 @@ builder.Services.AddRateLimiter(o=>{
             ? RateLimitPartition.GetNoLimiter("static")
             : RateLimitPartition.GetFixedWindowLimiter(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier)??ctx.Connection.RemoteIpAddress?.ToString()??"anonymous",_=>new(){PermitLimit=300,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
     o.AddPolicy("auth",ctx=>RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString()??"anonymous",_=>new(){PermitLimit=12,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
+    o.AddPolicy("search",ctx=>RateLimitPartition.GetFixedWindowLimiter(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier)??"anonymous",_=>new(){PermitLimit=6,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
 });
+builder.Services.AddSingleton<NativeSearch>();
 builder.Services.AddSingleton<WriteGate>();builder.Services.AddSingleton<Rules>();builder.Services.AddSingleton<EventFeed>();builder.Services.AddSingleton<TimeProvider,MonotonicClock>();
 builder.Services.AddScoped<GameService>();builder.Services.AddScoped<TournamentService>();builder.Services.AddHostedService<PlatformTicker>();
 builder.WebHost.ConfigureKestrel(o=>{o.Limits.MaxRequestBodySize=2_000_000;o.Limits.RequestHeadersTimeout=TimeSpan.FromSeconds(15);});
@@ -93,6 +97,9 @@ app.Use(async(ctx,next)=>{
     if(!ctx.Request.Path.StartsWithSegments("/api")){await next();return;}
     if(ctx.Request.Method is not ("GET" or "HEAD" or "OPTIONS"))await ctx.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(ctx);
     if(ctx.Request.Path.StartsWithSegments("/api/events")){await next();return;}
+    // Searches have their own bounded process pool and only read the account.
+    // Never hold the multiplayer write lock while waiting for the engine.
+    if(ctx.Request.Path=="/api/engine/search"){await next();return;}
     var gate=ctx.RequestServices.GetRequiredService<WriteGate>();await gate.Lock.WaitAsync(ctx.RequestAborted);
     try{
         if(ctx.User.Identity?.IsAuthenticated==true&&ctx.Request.Path!="/api/auth/logout"){var id=ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);var user=await ctx.RequestServices.GetRequiredService<PlatformDb>().Users.FindAsync(id);if(user==null||user.Suspended)throw new ApiError(403,"This account is unavailable.");}
@@ -101,6 +108,10 @@ app.Use(async(ctx,next)=>{
 });
 app.MapGet("/health",()=>Results.Ok(new{status="ok"}));
 app.MapCommunity(discord);
+app.MapPost("/api/engine/search",async(SkynetZero.Web.EngineRequest request,HttpContext context,PlatformDb db,NativeSearch search)=>{
+    if((await Api.User(context,db)).Suspended)throw new ApiError(403,"This account is unavailable.");
+    return Results.Content(await search.Run(request,context.RequestAborted),"application/json");
+}).RequireAuthorization().RequireRateLimiting("search");
 app.UseDefaultFiles();app.UseStaticFiles(new StaticFileOptions{OnPrepareResponse=c=>{if(c.File.Name.EndsWith(".wasm"))c.Context.Response.ContentType="application/wasm";}});
 app.MapFallback(async ctx=>{
     if(ctx.Request.Path.StartsWithSegments("/api")){ctx.Response.StatusCode=404;await ctx.Response.WriteAsJsonAsync(new{error="Endpoint not found."});return;}

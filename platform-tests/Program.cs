@@ -35,6 +35,7 @@ public static class Runner {
         var profile=await alice.Get<ProfileView>("api/players/Alice");Check(profile.Ratings.Length==24&&profile.Ratings.All(r=>r.Rating==1500&&r.Games==0),"Every variant/time pool starts at 1500");
         using(var bad=new HttpClient(factory.Server.CreateHandler()){BaseAddress=new("https://localhost")})await Reject(bad.PostAsJsonAsync("api/auth/register",new AccountRequest("NoCsrf","password enough long")),HttpStatusCode.BadRequest,"Registration rejects requests without CSRF");
         var pgn=VariantCatalog.StartingPgn("standard-t0");
+        await VerifyNativeSearch(factory,alice,pgn);
         var study=await alice.Post<StudyView>("api/studies",new StudyRequest("Secret prep","Private notes",false,[new("ch1","Opening",pgn,"<script>alert(1)</script>")]));
         await Reject(stranger.Http.GetAsync("api/studies/"+study.Id),HttpStatusCode.NotFound,"Private study is not readable by another user");
         Check(!(await stranger.Get<StudyView[]>("api/studies")).Any(s=>s.Id==study.Id),"Private study is excluded from discovery");
@@ -88,6 +89,33 @@ public static class Runner {
         await VerifyTournaments(factory);
         await alice.Post<JsonElement>("api/auth/logout");await alice.Session();await Reject(alice.Http.GetAsync("api/messages"),HttpStatusCode.Unauthorized,"Logout removes access to private data");
         Console.WriteLine($"PASS {checks} platform checks");
+    }
+    private static async Task VerifyNativeSearch(PlatformFactory factory,Client alice,string pgn){
+        var guest=new Client(factory);await guest.Session();
+        await Reject(guest.Send("api/engine/search","POST",new EngineRequest("analyze",Pgn:pgn,Index:0,Strength:1)),HttpStatusCode.Unauthorized,"Native search requires an account");
+        alice.Http.DefaultRequestHeaders.Remove("X-CSRF");
+        try{await Reject(alice.Send("api/engine/search","POST",new EngineRequest("analyze",Pgn:pgn,Index:0,Strength:1)),HttpStatusCode.BadRequest,"Native search requires CSRF protection");}
+        finally{await alice.Session();}
+        await Reject(alice.Send("api/engine/search","POST",new EngineRequest("import",Pgn:pgn)),HttpStatusCode.BadRequest,"Native search rejects non-search commands");
+        await Reject(alice.Send("api/engine/search","POST",new EngineRequest("analyze",Pgn:new string('x',NativeSearch.MaximumPgnLength+1))),HttpStatusCode.BadRequest,"Native search bounds uploaded PGN");
+        var analyzed=await alice.Post<EngineReply>("api/engine/search",new EngineRequest("analyze",Pgn:pgn,Index:0,Strength:1));
+        Check(analyzed.Error==null&&analyzed.Position==null&&analyzed.Evaluation is {Depth:1,SearchLocation:"server"},"Native child process returns real searched analysis");
+        using var scope=factory.Services.CreateScope();var gate=scope.ServiceProvider.GetRequiredService<WriteGate>();
+        await gate.Lock.WaitAsync();
+        try{
+            var played=await alice.Post<EngineReply>("api/engine/search",new EngineRequest("engine",Pgn:pgn,Strength:1)).WaitAsync(TimeSpan.FromSeconds(8));
+            Check(played.Error==null&&played.Position?.TurnCount==1&&played.Evaluation is {StopReason:"OpeningBook",SearchLocation:"server"},"Native bot plays a complete turn without holding the multiplayer write lock");
+        }finally{gate.Lock.Release();}
+        var native=scope.ServiceProvider.GetRequiredService<NativeSearch>();
+        using var cancellation=new CancellationTokenSource();
+        var searching=native.Run(new("analyze",Pgn:pgn,Index:0,Strength:100),cancellation.Token);
+        try{await native.Run(new("analyze",Pgn:pgn,Index:0,Strength:1),default);throw new Exception("Native worker pool exceeded its limit");}
+        catch(ApiError error){Check(error.Status==429,"Native worker pool rejects excess work without a queue");}
+        var timer=System.Diagnostics.Stopwatch.StartNew();cancellation.Cancel();
+        try{await searching;throw new Exception("Canceled native search returned a result");}
+        catch(OperationCanceledException){Check(timer.Elapsed<TimeSpan.FromSeconds(5),"Canceling a request terminates its native search process promptly");}
+        var after=JsonSerializer.Deserialize<EngineReply>(await native.Run(new("analyze",Pgn:pgn,Index:0,Strength:1),default),Json)!;
+        Check(after.Error==null&&after.Evaluation?.Depth==1,"Canceled native search releases its worker slot");
     }
     private static async Task VerifyRules(PlatformFactory factory){
         using var scope=factory.Services.CreateScope();var rules=scope.ServiceProvider.GetRequiredService<Rules>();

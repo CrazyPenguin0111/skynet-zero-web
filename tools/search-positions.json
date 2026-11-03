@@ -1,0 +1,5 @@
+[
+  {"name":"turn-zero","pgn":"[Board \"standard-t0\"]\n*"},
+  {"name":"four-plies","pgn":"[Board \"standard-t0\"]\n1. (0T1)Ng1f3 / (0T1)Ng8f6\n2. (0T2)Pd2d4 / (0T2)Pd7d5\n*"},
+  {"name":"branched","pgn":"[Board \"standard-t0\"]\n1. (0T1)Pe2e4 / (0T1)Pe7e5\n2. (0T2)Nb1>>(0T1)b3 /\n*"}
+]

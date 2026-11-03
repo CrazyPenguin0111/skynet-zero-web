@@ -9,7 +9,7 @@ public sealed record TimeControl(int Seconds,int Increment) {
 public sealed record UserView(string Id,string Username,bool Admin,string? DiscordUsername,double LeagueRating,bool LeagueClaimed);
 public sealed record RatingView(string Variant,string Category,double Rating,double Deviation,int Games);
 public sealed record ProfileView(UserView User,RatingView[] Ratings,int LeagueWins,int LeagueLosses,int LeagueDraws);
-public sealed record SiteInfo(bool Online,bool DiscordEnabled,VariantInfo[] Variants,string[] Formats,int GamesPerMatch=2);
+public sealed record SiteInfo(bool Online,bool DiscordEnabled,VariantInfo[] Variants,string[] Formats,int GamesPerMatch=2){public bool NativeSearch { get; init; }}
 public sealed record SessionView(UserView? User,string CsrfToken);
 public sealed record ChallengeView(string Id,string Creator,string Variant,int Seconds,int Increment,bool Rated,bool Private,string? Opponent,long Created);
 public sealed record MatchView(string Id,string Player1,string Player2,string Variant,string Category,bool Rated,string Status,double Score1,double Score2,string[] Games,string? TournamentId);

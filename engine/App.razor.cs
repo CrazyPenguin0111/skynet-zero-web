@@ -45,6 +45,7 @@ public partial class App : IAsyncDisposable
         if(_focusAfterRender&&_position is not null){_focusAfterRender=false;await FocusPresent();}
     }
     private async Task<EngineReply> Call(EngineRequest request) {
+        if(request.Command is "engine" or "analyze")request=request with {Pgn=_livePgn};
         string json=await JS.InvokeAsync<string>("skynet.request",JsonSerializer.Serialize(request,EngineBridge.Json));
         var reply=JsonSerializer.Deserialize<EngineReply>(json,EngineBridge.Json)??throw new InvalidDataException("The engine returned an empty response.");
         if(reply.Error!=null)throw new InvalidDataException(reply.Error);return reply;

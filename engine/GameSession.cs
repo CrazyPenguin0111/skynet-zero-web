@@ -13,6 +13,10 @@ public sealed class GameSession
     private readonly List<BranchView> branches=[];
     private readonly PortableModel model;
     private readonly SacrificeTable.Snapshot evaluationTables;
+    private CompleteTurnSearchMemory searchMemory = new();
+    private SacrificeTable.RootTravelContext? searchTravel;
+    private string? searchKey;
+    private int searchLevel;
     private string result="*", whiteName="You",blackName="SkynetZero";
     private int engineStrength;
     private CheckAndMateResult? liveStatus;
@@ -207,6 +211,7 @@ public sealed class GameSession
         if(depth!=0)throw new InvalidDataException("Unclosed 5DPGN comment.");return b.ToString();
     }
     public Evaluation Analyze(int index,int strength) {
+        var timer=System.Diagnostics.Stopwatch.StartNew();
         int i=Math.Clamp(index,0,positions.Count-1);var search=Search(positions[i],i,strength);
         if(i>=turns.Count)return search.Evaluation;
         var turn=turns[i];
@@ -218,11 +223,13 @@ public sealed class GameSession
         if(matches)evidence=evidence with { Loss=0,ComparisonDepth=search.Evaluation.Depth,
             MateVerdict=search.Evaluation.Mate is not null?search.Evaluation.Winner==turn.White?"Forced mate":"Mate sequence":null };
         else if(search.Result is {CompletedDepth:>0} found)
-            evidence=ComparePlayed(positions[i],turn,found,strength,sacrifice);
+            evidence=ComparePlayed(positions[i],turn,found,strength,sacrifice,
+                Math.Max(0,Strength.FromLevel(strength).Milliseconds-(int)timer.ElapsedMilliseconds));
         return search.Evaluation with { PlayedTurn=evidence };
     }
-    private PlayedTurnEvidence ComparePlayed(GameState root,TurnView turn,AlphaBetaResult found,int strength,int sacrifice){
+    private PlayedTurnEvidence ComparePlayed(GameState root,TurnView turn,AlphaBetaResult found,int strength,int sacrifice,int milliseconds){
         var unscored=new PlayedTurnEvidence(false,sacrifice);
+        if(milliseconds<=0)return unscored;
         var played=new List<Move?>();var replay=root.Clone();
         foreach(var view in turn.Moves){var move=FiveDProtocol.ParseMove(replay,view.Id);played.Add(move);
             if(!replay.MakeMove(move.Clone(),true))throw new InvalidDataException("Review turn failed legal replay.");}
@@ -236,11 +243,11 @@ public sealed class GameSession
         double Evaluate(AlphaBetaLeaf leaf){
             // Browser workers can be single-threaded: a wall-clock check in the
             // callback works even when timer callbacks cannot run during search.
-            if(timer.ElapsedMilliseconds>=level.Milliseconds)throw new OperationCanceledException();
+            if(timer.ElapsedMilliseconds>=milliseconds)throw new OperationCanceledException();
             return model.Evaluate(leaf.State,root.Color);
         }
         AlphaBetaResult comparison;
-        try{comparison=CompleteTurnAlphaBetaSearch.CompareForTraining(root,settings,[found.CompleteTurnMoves,played.ToArray()],Evaluate,default);}
+        try{comparison=CompleteTurnAlphaBetaSearch.CompareForTraining(root,settings,[found.CompleteTurnMoves,played.ToArray()],Evaluate,default,milliseconds);}
         catch(OperationCanceledException){return unscored;}
         if(comparison.TrainingDepth<found.CompletedDepth||comparison.TrainingTurns.Length!=2)return unscored;
         string Key(IEnumerable<Move?> moves)=>string.Join('|',moves.Select(CompleteTurnCandidates.ActionKey));
@@ -285,16 +292,26 @@ public sealed class GameSession
         if(pending.Count>0)Submit();engineStrength=Math.Max(engineStrength,Strength.FromLevel(strength).Level);return search.Evaluation;
     }
     private (AlphaBetaResult? Result,Evaluation Evaluation) Search(GameState source,int index,int strength) {
+        var timer=System.Diagnostics.Stopwatch.StartNew();
         var state=source.Clone();bool white=state.Color;var level=Strength.FromLevel(strength);
         // Match native frozen-arena evaluation: the same tables and root travel
         // routes apply throughout a search, instead of treating every leaf as
         // a new root and awarding new travel opportunities inconsistently.
         using var tables=SacrificeTable.UseSnapshot(evaluationTables);
-        using var travel=SacrificeTable.UseRootTravel(SacrificeTable.CaptureRootTravel(state));
+        string key=CompleteTurnStateHash.Compute(state);
+        // Reuse work only for the identical full history, variant and frozen
+        // evaluator. Lowering strength starts afresh so a weak bot cannot use
+        // a previous stronger search. Retain just one root to bound memory.
+        if(key!=searchKey||level.Level!=searchLevel&&!(level.Level>searchLevel&&searchMemory.Resume?.Complete==true)){
+            searchMemory=new();searchKey=key;searchTravel=SacrificeTable.CaptureRootTravel(state);
+        }
+        searchLevel=level.Level;
+        using var travel=SacrificeTable.UseRootTravel(searchTravel!);
         var proof=CheckAndMate.Analyze(state,new(){MaxWork=100000,MaxMilliseconds=250});
         if(proof.IsTerminal)return(null,new(index,proof.WinnerWhite==null?0:null,proof.WinnerWhite!=null?0:null,proof.WinnerWhite,0,0,0,false,"",proof.Status.ToString()));
         var settings=new AlphaBetaSettings {CompleteTurnDepth=level.Depth,MaxNodes=level.Nodes,Threads=1,MaxActionsPerTurn=32,TranspositionEntries=4096,QuiescenceTurns=1};
-        var found=CompleteTurnAlphaBetaSearch.Choose(state,settings,level.Milliseconds,evaluate:leaf=>model.Evaluate(leaf.State,white),evaluatorUnits:true);
+        var found=CompleteTurnAlphaBetaSearch.Choose(state,settings,Math.Max(1,level.Milliseconds-(int)timer.ElapsedMilliseconds),
+            evaluate:leaf=>model.Evaluate(leaf.State,white),evaluatorUnits:true,memory:searchMemory);
         int? mate=found.ProvenMateDistance is {} d?(Math.Abs(d)+1)/2:null;
         bool? winner=mate!=null?(found.SourceScore>0?white:!white):null;
         // Internal units are normalized to the v10 active-pawn coefficient: 100 cp = one reference pawn.

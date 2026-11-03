@@ -18,12 +18,13 @@ internal static class Regression
         Check(levels.Select(l=>l.Nodes).Distinct().Count()==100&&levels.Select(l=>l.Milliseconds).Distinct().Count()==100,"Strength must have 100 distinct search budgets");
         Check(levels.Zip(levels.Skip(1)).All(p=>p.First.Nodes<p.Second.Nodes&&p.First.Milliseconds<p.Second.Milliseconds&&p.First.Depth<=p.Second.Depth),"Strength budgets must increase monotonically");
         Check(Strength.FromLevel(-1)==levels[0]&&Strength.FromLevel(101)==levels[^1],"Strength range bounds");
-        Check(levels[0].Milliseconds==1000&&levels[^1].Milliseconds==60000&&levels[^1].Nodes==65536&&levels[33].Nodes==512,"Strength endpoints and default budget");
+        Check(levels[0].Milliseconds==1000&&levels[^1].Milliseconds==16000&&levels[^1].Nodes==2_000_000&&levels[33].Nodes==512,"Strength endpoints and default budget");
         Check(levels[^1].Depth==64,"Maximum strength must allow iterative deepening to depth 64 within its time/node budget");
         var model=PortableModel.LoadBundled();
         Check(model.InputVersion==11,"The website must load the promoted compact v11 model");
         var vectors=JsonSerializer.Deserialize<VectorCase[]>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"parity-vectors.json")))!;
         using(var table=typeof(PortableModel).Assembly.GetManifestResourceStream("SkynetZero.LearnedTables.bin")!)SacrificeTable.ReadLearned(table,true);
+        SearchPerformanceChecks.Run();
         double max=0;
         foreach(var v in vectors){if(v.pgn!=null){var actualFeatures=new float[107];ExtendedEvaluationTermsEncoding.Fill(FENParser.ShadSTDGSMFromString(v.pgn)!,v.white,actualFeatures);Check(actualFeatures.SequenceEqual(v.input),"Production feature parity: "+v.pgn);}var actual=model.Forward(v.input);max=Math.Max(max,Math.Abs(actual-v.expected));Check(Math.Abs(actual-v.expected)<.00002f,$"Model parity {actual} vs {v.expected}");}
         Console.WriteLine($"PASS TorchSharp model parity: {vectors.Length} vectors, max error {max:E3}");

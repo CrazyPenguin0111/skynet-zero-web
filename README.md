@@ -39,12 +39,14 @@ Browser adaptations are recorded in [source-manifest.json](engine/source-manifes
 |---|---:|---:|---:|
 | 1 | 1 | 96 | 1 second |
 | 34 (default) | 2 | 512 | 3 seconds |
-| 67 | 6 | 8,192 | 15 seconds |
-| 100 | 64 | 65,536 | 60 seconds |
+| 67 | 6 | 32,768 | 8 seconds |
+| 100 | 64 | 2,000,000 | 16 seconds |
 
 Every intermediate level has its own smoothly increasing node and time budgets. Play and analysis each have a slider. Engine games record the highest played strength in a `SkynetStrength` PGN tag; analysis cannot use a weaker budget. Older engine exports without this tag use maximum analysis. The achieved search depth is shown after each engine move. These are search budgets, not Elo ratings or strict wall-clock guarantees. A complex complete-turn generation or legality check can exceed the time budget. **Stop** terminates the worker and restores the game. If no search depth completes, the UI labels the score as a static evaluation and any playable fallback explicitly.
 
 Depth 64 is a ceiling, not a claim of completed search. The shipped v11 model was trained directly through self-play. It is distinct from the older [small evaluator distillation experiment](tools/SmallModelStudy/README.md), whose candidate weights and measured results remain included separately.
+
+Release builds compile the engine ahead of time to WebAssembly. Search shares immutable move-ordering history pages, reuses validated atomic-move safety, and continues repeated analysis of the identical root. The VDS additionally runs native bot/analysis searches for signed-in players. A busy server or guest session uses the browser engine. Native results identify themselves as **Server**; the worker synchronizes the resulting PGN before further local moves. Search PGNs are processed in memory and are not saved by the search endpoint. See [measured search performance](tools/SearchBenchmark/README.md).
 
 ## Opening repertoire
 
@@ -64,7 +66,7 @@ Review changes and deliberately update the bundle checksum afterward. Normal bui
 
 ## Analysis and notation
 
-Positive scores favor White. Engine value units are normalized using the shared evaluation-term reference active-pawn coefficient: **484.2 engine units = 100 centipawns**. Scores are shown in pawn units (`+1.25`) and move losses in centipawns (`125 cp`). Loss compares the engine's best and played **complete multiverse turns from the same root and completed search depth**, floored at zero. A searched best turn has zero loss even if the next position's independent search changes its evaluation. Comparing a different played turn may require a second search with the selected budget; incomplete comparisons are unscored. Values are clipped to ±1,000 cp for loss calculation. ACPL is the arithmetic mean of scored turns for that side.
+Positive scores favor White. Engine value units are normalized using the shared evaluation-term reference active-pawn coefficient: **484.2 engine units = 100 centipawns**. Scores are shown in pawn units (`+1.25`) and move losses in centipawns (`125 cp`). Loss compares the engine's best and played **complete multiverse turns from the same root and completed search depth**, floored at zero. A searched best turn has zero loss even if the next position's independent search changes its evaluation. Comparing a different played turn uses only the time remaining in the selected per-position budget; incomplete comparisons are unscored. Values are clipped to ±1,000 cp for loss calculation. ACPL is the arithmetic mean of scored turns for that side.
 
 Badges include **Book, Best, Brilliant, Excellent, Good, Inaccuracy, Mistake and Blunder**. Best matches the searched turn or a tied alternative. Brilliant additionally requires a spatial piece sacrifice verified by native static exchange, completed depth 3 on both positions, and a preserved evaluation; temporal and multi-board sacrifices are not guessed. Numerical thresholds are 50 cp for Inaccuracy, 100 cp for Mistake and 300 cp for Blunder. These are SkynetZero classifications, not Chess.com's proprietary algorithm.
 
@@ -80,11 +82,12 @@ Export writes explicit initial 5DFEN boards and mainline moves. Comments, origin
 
 ## Build and run
 
-Requires the **.NET 10 SDK**. Node.js 24 is used only for integration tests; Python 3 is used for the integrity check and optional local static server. No npm packages, CUDA, TorchSharp, original checkout, or WebAssembly workload are required for the normal build.
+Requires the **.NET 10 SDK** and its **wasm-tools** workload for optimized release publishing. Node.js 24 is used only for integration tests; Python 3 is used for the integrity check and optional local static server. CUDA, TorchSharp and the original checkout are not required.
 
 ```sh
 python3 tools/verify-bundle.py
 dotnet run --project tests/EngineTests.csproj -c Release
+dotnet workload install wasm-tools
 dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
 node tools/wasm-smoke.mjs
 node tools/worker-smoke.mjs
@@ -92,7 +95,7 @@ node tools/browser-controls.mjs
 python3 -m http.server 4183 --directory artifacts/publish/wwwroot
 ```
 
-Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. Game calculation and analysis stay local after assets load. The static bot has no analytics. On the VDS, multiplayer games and explicitly saved studies are stored by the server.
+Open `http://localhost:4183`. Serve the published directory over HTTP; opening `index.html` as a file will not load WebAssembly. Use a modern browser with WebAssembly SIMD and module workers. The first visit downloads the .NET runtime and model/evaluation data; subsequent visits can use the browser cache. On static hosting, game calculation and analysis stay local after assets load. Signed-in VDS users send the current PGN for native search when available. The static bot has no analytics. Multiplayer games and explicitly saved studies are stored by the VDS server. For a quick interpreter-only development publish, pass `-p:RunAOTCompilation=false`; production uses AOT.
 
 `tests/Program.cs` covers model/feature parity, strict moves, pending undo, time travel, multi-board turns, import/export, promotion restrictions, mate proof and loss orientation. `tests/UiChecks.cs` renders real Razor components. The Node integration tests execute the **published browser WebAssembly**, including opening-book play, the actual worker bridge and cancellation. A controlled-clock DOM fixture checks continuous diagonal panning, display-rate independence, keyboard release/blur/dialog guards and pointer-centered wheel zoom. They do not substitute for an interactive visual browser check.
 

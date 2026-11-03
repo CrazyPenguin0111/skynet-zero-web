@@ -39,8 +39,11 @@ try{
   await alice.getByRole('gridcell').first().waitFor({timeout:60000});
   await alice.waitForFunction(()=>document.querySelector('.turn-indicator strong')?.textContent?.includes('Position'));
   assert.equal(await alice.locator('.notice.error').count(),0,'Study PGN must import successfully');
+  await alice.getByRole('button',{name:/Analyze position/}).click();
+  await alice.locator('.evaluation small').filter({hasText:/Server/}).waitFor({timeout:30000});
+  assert.equal(await alice.locator('.notice.error').count(),0,'Signed-in analysis must complete through the native engine');
   await alice.screenshot({path:join(output,'study.png'),fullPage:true});
-  console.log('PASS browser private study editing and analysis board');
+  console.log('PASS browser private study editing and native server analysis');
   await route(alice,'messages','Messages');await alice.getByLabel('New conversation').fill(names[1]);
   await alice.getByRole('button',{name:'Open →',exact:true}).click();
   // Typing another name must not silently change the active conversation.

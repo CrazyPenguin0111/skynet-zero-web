@@ -18,7 +18,7 @@ public static partial class Api {
     public static async Task<UserView> UserView(Player p,PlatformDb db){var league=await db.LeaguePlayers.SingleOrDefaultAsync(l=>l.UserId==p.Id);return new(p.Id,p.UserName!,p.IsAdmin,p.DiscordUsername,league?.Elo??1380,league?.Legacy??false);}
     private static void ValidateControl(string variant,int seconds,int increment){VariantCatalog.Get(variant);if(!new TimeControl(seconds,increment).Valid)throw new ApiError(400,"Use 30 seconds to 180 minutes, with an increment from 0 to 180 seconds.");}
     public static void MapCommunity(this WebApplication app,bool discord){
-        app.MapGet("/api/site",()=>new SiteInfo(true,discord,VariantCatalog.All,TournamentService.Formats));
+        app.MapGet("/api/site",(NativeSearch search)=>new SiteInfo(true,discord,VariantCatalog.All,TournamentService.Formats){NativeSearch=search.Enabled});
         app.MapGet("/api/auth/session",async(HttpContext c,PlatformDb db,IAntiforgery csrf)=>{
             var player=OptionalUser(c) is {} id?await db.Users.FindAsync(id):null;
             return new SessionView(player==null?null:await UserView(player,db),csrf.GetAndStoreTokens(c).RequestToken!);

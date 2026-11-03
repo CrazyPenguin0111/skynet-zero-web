@@ -1,0 +1,12 @@
+import path from 'node:path';
+import fs from 'node:fs';
+import {pathToFileURL} from 'node:url';
+const root=path.resolve(process.argv[2]||'artifacts/benchmark/wwwroot');
+const requests=JSON.parse(fs.readFileSync(process.argv[3]||'tools/search-positions.json','utf8'));
+const {dotnet}=await import(pathToFileURL(path.join(root,'_framework/dotnet.js')));
+const runtime=await dotnet.withDiagnosticTracing(false).create();
+const exports=await runtime.getAssemblyExports('SkynetZero.Web.dll');
+const run=request=>console.log(exports.SkynetZero.Benchmarks.Benchmark.Run(JSON.stringify(request)));
+run({...requests[0],name:'warmup',depth:1,nodes:64,milliseconds:0});
+for(const request of requests)run(request);
+process.exit(0);

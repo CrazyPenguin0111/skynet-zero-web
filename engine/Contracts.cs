@@ -18,9 +18,9 @@ public sealed record EngineRequest(string Command,string? Pgn=null,string? Move=
 public sealed record EngineReply(PositionView? Position=null,Evaluation? Evaluation=null,string? Error=null,string? Info=null);
 public sealed record Strength(int Level,int Depth,int Nodes,int Milliseconds) {
     public const int Minimum=1,Maximum=100,Default=34;
-    // Distinct, smoothly increasing budgets. Maximum allows a minute of search;
-    // the previous 15-second maximum often stopped after just two full turns.
-    private static readonly Strength[] Anchors=[new(1,1,96,1000),new(34,2,512,3000),new(67,6,8192,15000),new(100,64,65536,60000)];
+    // Keep a short response time while allowing compiled search to use the
+    // training-scale node budget. Depth means completed multiverse turns.
+    private static readonly Strength[] Anchors=[new(1,1,96,1000),new(34,2,512,3000),new(67,6,32768,8000),new(100,64,2_000_000,16000)];
     public static Strength FromLevel(int value) {
         int level=Math.Clamp(value,Minimum,Maximum),segment=Math.Min((level-1)/33,2);
         var low=Anchors[segment];var high=Anchors[segment+1];double t=(level-low.Level)/33d;
@@ -32,10 +32,11 @@ public sealed record Evaluation(int Index,int? Centipawns,int? Mate,bool? Winner
     bool Interrupted,string BestTurn,string StopReason,bool StaticOnly=false,string? BookName=null)
 {
     public PlayedTurnEvidence? PlayedTurn { get; init; }
+    public string? SearchLocation { get; init; }
     public string Display => Mate is { } mate ? (mate==0?"Checkmate":$"{(Winner==false?"−":"")}M{mate}")
         : Centipawns is { } cp ? (cp>=0?"+":"−")+(Math.Abs(cp)/100d).ToString("0.00",CultureInfo.InvariantCulture) : "—";
     public string Explanation => BookName is {} book ? $"Opening book · {book}" : Mate is { } m ? (m==0?"Checkmate":$"{(Winner==true?"White":"Black")} has a proven mate in {m}")
-        : StaticOnly ? "Static model evaluation; search did not complete a depth" : $"Depth {Depth} · {Nodes:N0} nodes · {Seconds:0.0}s";
+        : StaticOnly ? "Static model evaluation; search did not complete a depth" : $"Depth {Depth} · {Nodes:N0} nodes · {Seconds:0.0}s{(SearchLocation=="server"?" · Server":"")}";
 }
 public sealed record PlayedTurnEvidence(bool Best,int SacrificeCentipawns,int? Loss=null,int ComparisonDepth=0,string? MateVerdict=null);
 public sealed record TurnAnalysis(int Index,bool White,int? Loss,string Verdict,Evaluation Before,Evaluation After)

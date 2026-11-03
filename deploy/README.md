@@ -13,10 +13,11 @@ Deployment has not been performed: both the IP and domain rejected the available
 
 ## Build and test
 
-Use the .NET 10 SDK and Python 3. For browser tests, install Playwright and Chromium in a development environment.
+Use the .NET 10 SDK, its `wasm-tools` workload, and Python 3. For browser tests, install Playwright and Chromium in a development environment.
 
 ```sh
 python3 tools/verify-bundle.py
+dotnet workload install wasm-tools
 dotnet run --project tests/EngineTests.csproj -c Release
 dotnet run --project platform-tests/PlatformTests.csproj -c Release
 bash tools/package-platform.sh linux-x64
@@ -72,6 +73,14 @@ curl --fail https://play.5dchess.net/health
 ```
 
 Verify public HTTPS, registration, login, a casual two-game match between controlled accounts, saved studies after restart, and the Discord redirect. Inspect `journalctl -u skynetzero`. Clock time continues through disconnects and service restarts; schedule maintenance when games are idle.
+
+## Native bot and analysis searches
+
+Signed-in players use `/api/engine/search`; guests, disabled engines and busy pools use the AOT browser engine. The endpoint requires the session cookie and CSRF token, checks suspended accounts, and permits six requests per account per minute. Searches never acquire the multiplayer write lock or write a game/study record.
+
+`NativeSearch__Enabled=true` and `NativeSearch__Workers=1` are the defaults. Each request launches the same server executable in `--engine-worker` mode, before database initialization. It has a 384 MiB managed-heap ceiling, one search thread with background GC/JIT, a bounded 64,000-character PGN, bounded output, and a hard deadline of the selected search budget plus four seconds for startup/parsing. Cancellation kills the process tree. Keep one worker until VDS measurements justify more; the supported maximum is four. Set `NativeSearch__Enabled=false` to use only browser search. Allow at least 25 seconds for this route in the reverse proxy.
+
+Depth is measured in complete multiverse turns. Native opening searches reached depth 10 within 16 seconds on the development machine, but VDS CPU speed and branching positions materially affect depth. Verify actual results after deployment; no fixed depth is guaranteed for every position.
 
 ## Discord and administrators
 

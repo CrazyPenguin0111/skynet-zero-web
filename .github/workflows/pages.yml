@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v6
@@ -33,7 +33,9 @@ jobs:
       - name: Test accounts, privacy, ratings, clocks, league import and tournaments
         run: dotnet run --project platform-tests/PlatformTests.csproj -c Release
       - name: Publish static WebAssembly app
-        run: dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
+        run: |
+          dotnet workload install wasm-tools
+          dotnet publish engine/SkynetZero.Web.csproj -c Release -o artifacts/publish
       - name: Run the published WebAssembly engine
         run: node tools/wasm-smoke.mjs
       - name: Test the shipped worker and cancellation
